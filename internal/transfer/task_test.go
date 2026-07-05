@@ -2,6 +2,8 @@ package transfer
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -102,6 +104,42 @@ func TestManagerWaitReturnsWithoutRunningTasks(t *testing.T) {
 	defer cancel()
 	if err := manager.Wait(ctx); err != nil {
 		t.Fatalf("wait returned error: %v", err)
+	}
+}
+
+func TestManagerCancelAndRemoveQueuedTask(t *testing.T) {
+	manager := NewManager()
+	task := NewTask("1", Upload, "a", "b")
+	manager.Add(task)
+	if err := manager.CancelAndRemove(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := manager.Tasks(); len(got) != 0 {
+		t.Fatalf("tasks = %d, want 0", len(got))
+	}
+}
+
+func TestCleanupTaskTempRemovesLocalDownloadTemp(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	task := NewTask("abc", Download, "/remote/target.txt", target)
+	tempPath := TempLocalPath(target, task.ID)
+	if err := os.WriteFile(tempPath, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupTaskTemp(nil, task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Fatalf("temp path still exists or unexpected stat error: %v", err)
+	}
+}
+
+func TestTaskTempPathSnapshot(t *testing.T) {
+	task := NewTask("1", Upload, "a", "b")
+	task.SetTempPath("/tmp/.b.vssh.tmp.1")
+	if got := task.Snapshot().TempPath; got != "/tmp/.b.vssh.tmp.1" {
+		t.Fatalf("temp path = %q", got)
 	}
 }
 

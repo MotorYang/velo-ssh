@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/pkg/sftp"
@@ -62,6 +63,26 @@ func (m *Manager) Cancel(id string) error {
 		return fmt.Errorf("task %q not found", id)
 	}
 	task.Cancel()
+	m.schedule()
+	return nil
+}
+
+func (m *Manager) CancelAndRemove(id string) error {
+	m.mu.Lock()
+	task := m.tasks[id]
+	job := m.jobs[id]
+	m.mu.Unlock()
+	if task == nil {
+		return fmt.Errorf("task %q not found", id)
+	}
+	task.Cancel()
+	if job != nil {
+		_ = cleanupTaskTemp(job.client, task)
+	}
+	m.mu.Lock()
+	delete(m.jobs, id)
+	delete(m.tasks, id)
+	m.mu.Unlock()
 	m.schedule()
 	return nil
 }
@@ -178,9 +199,9 @@ func (m *Manager) run(job *job) {
 	var err error
 	switch job.task.Direction {
 	case Upload:
-		err = AtomicUpload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.cancel, job.task.WaitIfPaused)
+		err = AtomicUpload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.SetTempPath, job.task.cancel, job.task.WaitIfPaused)
 	case Download:
-		err = AtomicDownload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.cancel, job.task.WaitIfPaused)
+		err = AtomicDownload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.SetTempPath, job.task.cancel, job.task.WaitIfPaused)
 	default:
 		err = fmt.Errorf("unsupported transfer direction %q", job.task.Direction)
 	}
@@ -201,6 +222,38 @@ func (m *Manager) run(job *job) {
 	m.mu.Lock()
 	m.running--
 	delete(m.jobs, job.task.ID)
+	if job.task.Snapshot().Status == TaskCanceled {
+		delete(m.tasks, job.task.ID)
+	}
 	m.mu.Unlock()
 	m.schedule()
+}
+
+func cleanupTaskTemp(client *sftp.Client, task *Task) error {
+	if task == nil {
+		return nil
+	}
+	snapshot := task.Snapshot()
+	tempPath := snapshot.TempPath
+	if tempPath == "" {
+		switch snapshot.Direction {
+		case Upload:
+			tempPath = TempRemotePath(snapshot.TargetPath, snapshot.ID)
+		case Download:
+			tempPath = TempLocalPath(snapshot.TargetPath, snapshot.ID)
+		}
+	}
+	if tempPath == "" {
+		return nil
+	}
+	if snapshot.Direction == Upload {
+		if client == nil {
+			return nil
+		}
+		return client.Remove(tempPath)
+	}
+	if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

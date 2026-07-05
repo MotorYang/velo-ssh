@@ -31,53 +31,55 @@ type fileItem struct {
 }
 
 type Model struct {
-	state                app.AppState
-	previous             app.AppState
-	store                *config.Store
-	secrets              config.SecretStore
-	config               config.File
-	styles               styles
-	ascii                bool
-	width                int
-	height               int
-	cursor               int
-	filter               string
-	status               string
-	err                  string
-	activePane           int
-	localCursor          int
-	remoteCursor         int
-	showFileTime         bool
-	localDir             string
-	remoteDir            string
-	localFiles           []fileItem
-	remoteFiles          []fileItem
-	tasks                *transfer.Manager
-	taskCursor           int
-	completedTasks       map[string]bool
-	ssh                  *sshnet.Client
-	activeServer         config.Server
-	searching            bool
-	searchInput          textinput.Model
-	renaming             bool
-	renameInput          textinput.Model
-	creatingDir          bool
-	mkdirInput           textinput.Model
-	form                 serverForm
-	settingsForm         settingsForm
-	modalKind            string
-	deleteID             string
-	deleteName           string
-	hostKeyErr           *sshnet.UnknownHostKeyError
-	pendingHostKeyAction string
-	pendingHostKeyServer config.Server
-	pendingTransferDir   transfer.Direction
-	pendingTransferItems []fileItem
-	pendingOverwrite     []string
-	pendingFileDelete    []fileItem
-	pendingDeleteRemote  bool
-	clipboardFiles       []fileItem
-	clipboardRemote      bool
+	state                 app.AppState
+	previous              app.AppState
+	store                 *config.Store
+	secrets               config.SecretStore
+	config                config.File
+	styles                styles
+	ascii                 bool
+	width                 int
+	height                int
+	cursor                int
+	filter                string
+	status                string
+	err                   string
+	activePane            int
+	localCursor           int
+	remoteCursor          int
+	showFileTime          bool
+	localDir              string
+	remoteDir             string
+	localFiles            []fileItem
+	remoteFiles           []fileItem
+	tasks                 *transfer.Manager
+	taskCursor            int
+	completedTasks        map[string]bool
+	ssh                   *sshnet.Client
+	activeServer          config.Server
+	searching             bool
+	searchInput           textinput.Model
+	renaming              bool
+	renameInput           textinput.Model
+	creatingDir           bool
+	mkdirInput            textinput.Model
+	form                  serverForm
+	settingsForm          settingsForm
+	modalKind             string
+	deleteID              string
+	deleteName            string
+	hostKeyErr            *sshnet.UnknownHostKeyError
+	pendingHostKeyAction  string
+	pendingHostKeyServer  config.Server
+	pendingTransferDir    transfer.Direction
+	pendingTransferItems  []fileItem
+	pendingOverwrite      []string
+	pendingFileDelete     []fileItem
+	pendingDeleteRemote   bool
+	pendingTaskCancelID   string
+	pendingTaskCancelName string
+	clipboardFiles        []fileItem
+	clipboardRemote       bool
 }
 
 type serverForm struct {
@@ -334,11 +336,12 @@ func (m Model) handleTaskCenterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "no task selected"
 			return m, nil
 		}
-		if err := m.tasks.Cancel(tasks[m.taskCursor].ID); err != nil {
-			m.err = err.Error()
-			return m, nil
-		}
-		m.status = fmt.Sprintf("Canceled task %s.", tasks[m.taskCursor].ID)
+		task := tasks[m.taskCursor]
+		m.previous = m.state
+		m.modalKind = modalTaskCancel
+		m.pendingTaskCancelID = task.ID
+		m.pendingTaskCancelName = fmt.Sprintf("%s %s -> %s", task.Direction, task.SourcePath, task.TargetPath)
+		m.state = app.StateConfirmModal
 	case "p":
 		if len(tasks) == 0 {
 			m.err = "no task selected"
@@ -581,6 +584,9 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.modalKind == modalFileDelete {
 		return m.handleFileDeleteConfirmKey(msg)
 	}
+	if m.modalKind == modalTaskCancel {
+		return m.handleTaskCancelConfirmKey(msg)
+	}
 	switch msg.String() {
 	case keyEsc, "n", "N":
 		m.state = m.previous
@@ -652,6 +658,32 @@ func (m *Model) clearFileDeletePrompt() {
 	m.modalKind = ""
 	m.pendingFileDelete = nil
 	m.pendingDeleteRemote = false
+}
+
+func (m Model) handleTaskCancelConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEsc, "n", "N":
+		m.status = "Task cancel aborted."
+		m.clearTaskCancelPrompt()
+		m.state = m.previous
+	case keyEnter, "y", "Y":
+		id := m.pendingTaskCancelID
+		m.clearTaskCancelPrompt()
+		m.state = app.StateTaskCenter
+		if err := m.tasks.CancelAndRemove(id); err != nil {
+			m.err = err.Error()
+			return m, nil
+		}
+		m.taskCursor = clampCursor(m.taskCursor, len(m.taskSnapshots()))
+		m.status = fmt.Sprintf("Canceled and removed task %s.", id)
+	}
+	return m, nil
+}
+
+func (m *Model) clearTaskCancelPrompt() {
+	m.modalKind = ""
+	m.pendingTaskCancelID = ""
+	m.pendingTaskCancelName = ""
 }
 
 func (m Model) handleHostKeyConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

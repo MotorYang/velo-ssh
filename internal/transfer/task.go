@@ -32,6 +32,7 @@ type Task struct {
 	TargetPath string
 	BytesTotal int64
 	BytesDone  int64
+	TempPath   string
 	Status     Status
 	Error      string
 	StartedAt  time.Time
@@ -66,11 +67,19 @@ func (t *Task) Snapshot() Task {
 		TargetPath: t.TargetPath,
 		BytesTotal: t.BytesTotal,
 		BytesDone:  t.BytesDone,
+		TempPath:   t.TempPath,
 		Status:     t.Status,
 		Error:      t.Error,
 		StartedAt:  t.StartedAt,
 		UpdatedAt:  t.UpdatedAt,
 	}
+}
+
+func (t *Task) SetTempPath(path string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.TempPath = path
+	t.UpdatedAt = time.Now()
 }
 
 func (t *Task) SetProgress(done, total int64) {

@@ -11,6 +11,7 @@ const (
 	modalHostKey    = "host_key"
 	modalOverwrite  = "overwrite"
 	modalFileDelete = "file_delete"
+	modalTaskCancel = "task_cancel"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -95,6 +96,17 @@ func (m Model) viewFileDeleteConfirm() string {
 	return m.viewModal(message)
 }
 
+func (m Model) viewTaskCancelConfirm() string {
+	message := "Cancel and remove transfer task?\n\n"
+	message += "Task: " + m.pendingTaskCancelID + "\n"
+	if m.pendingTaskCancelName != "" {
+		message += "Path: " + m.pendingTaskCancelName + "\n"
+	}
+	message += "\nThe running transfer is canceled, temporary files are removed when possible, and the task record is removed from the list.\n\n"
+	message += "[Enter]/[y] Cancel Task | [Esc]/[n] Keep Task"
+	return m.viewModal(message)
+}
+
 func (m Model) viewConfirmModal() string {
 	if m.modalKind == modalHostKey {
 		return m.viewHostKeyConfirm()
@@ -104,6 +116,9 @@ func (m Model) viewConfirmModal() string {
 	}
 	if m.modalKind == modalFileDelete {
 		return m.viewFileDeleteConfirm()
+	}
+	if m.modalKind == modalTaskCancel {
+		return m.viewTaskCancelConfirm()
 	}
 	return m.viewDeleteConfirm()
 }

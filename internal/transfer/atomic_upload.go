@@ -24,7 +24,7 @@ func TempLocalPath(targetPath, taskID string) string {
 	return filepath.Join(dir, fmt.Sprintf(".%s.vssh.tmp.%s", base, taskID))
 }
 
-func AtomicUpload(client *sftp.Client, localPath, remotePath, taskID string, progress func(done, total int64), canceled <-chan struct{}, waitIfPaused func(<-chan struct{}) bool) error {
+func AtomicUpload(client *sftp.Client, localPath, remotePath, taskID string, progress func(done, total int64), tempPath func(string), canceled <-chan struct{}, waitIfPaused func(<-chan struct{}) bool) error {
 	local, err := os.Open(localPath)
 	if err != nil {
 		return err
@@ -36,6 +36,9 @@ func AtomicUpload(client *sftp.Client, localPath, remotePath, taskID string, pro
 	}
 	total := info.Size()
 	tmpPath := TempRemotePath(remotePath, taskID)
+	if tempPath != nil {
+		tempPath(tmpPath)
+	}
 	var mode os.FileMode
 	if old, err := client.Stat(remotePath); err == nil {
 		mode = old.Mode()
@@ -101,7 +104,7 @@ func AtomicUpload(client *sftp.Client, localPath, remotePath, taskID string, pro
 	return nil
 }
 
-func AtomicDownload(client *sftp.Client, remotePath, localPath, taskID string, progress func(done, total int64), canceled <-chan struct{}, waitIfPaused func(<-chan struct{}) bool) error {
+func AtomicDownload(client *sftp.Client, remotePath, localPath, taskID string, progress func(done, total int64), tempPath func(string), canceled <-chan struct{}, waitIfPaused func(<-chan struct{}) bool) error {
 	remote, err := client.Open(remotePath)
 	if err != nil {
 		return err
@@ -113,6 +116,9 @@ func AtomicDownload(client *sftp.Client, remotePath, localPath, taskID string, p
 	}
 	total := info.Size()
 	tmpPath := TempLocalPath(localPath, taskID)
+	if tempPath != nil {
+		tempPath(tmpPath)
+	}
 	local, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err

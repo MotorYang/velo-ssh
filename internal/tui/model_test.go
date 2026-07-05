@@ -564,7 +564,7 @@ func TestFileManagerMKeyTogglesTime(t *testing.T) {
 	}
 }
 
-func TestTaskCenterMoveAndCancel(t *testing.T) {
+func TestTaskCenterMoveAndCancelWithConfirm(t *testing.T) {
 	m := NewModel(app.StateTaskCenter, config.NewStore(t.TempDir()), config.DefaultFile())
 	first := transfer.NewTask("task-a", transfer.Upload, "/local/a", "/remote/a")
 	second := transfer.NewTask("task-b", transfer.Download, "/remote/b", "/local/b")
@@ -579,9 +579,14 @@ func TestTaskCenterMoveAndCancel(t *testing.T) {
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	m = updated.(Model)
+	if m.state != app.StateConfirmModal || m.modalKind != modalTaskCancel {
+		t.Fatalf("state=%s modal=%s, want task cancel confirm", m.state, m.modalKind)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
 	tasks := m.taskSnapshots()
-	if tasks[1].Status != transfer.TaskCanceled {
-		t.Fatalf("task status = %s, want canceled", tasks[1].Status)
+	if len(tasks) != 1 || tasks[0].ID != "task-a" {
+		t.Fatalf("tasks after cancel = %+v, want only task-a", tasks)
 	}
 	if !strings.Contains(m.viewTaskCenter(), ">") {
 		t.Fatalf("task center should render selected row: %q", m.viewTaskCenter())

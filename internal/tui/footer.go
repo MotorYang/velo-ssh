@@ -105,6 +105,9 @@ func (m Model) helpText() string {
 		if m.modalKind == modalFileDelete {
 			return "[Enter]/[y] Delete | [Esc]/[n] Cancel"
 		}
+		if m.modalKind == modalTaskCancel {
+			return "[Enter]/[y] Cancel Task | [Esc]/[n] Keep Task"
+		}
 		return "[Enter]/[y] Confirm | [Esc]/[n] Cancel"
 	case app.StateShell:
 		return "[Enter]/[o] Open Shell | [Esc] Server List"
