@@ -277,6 +277,64 @@ func TestFileManagerSelection(t *testing.T) {
 	}
 }
 
+func TestFileManagerSearchFiltersCurrentPane(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localFiles = []fileItem{
+		{Name: "..", Path: "/tmp", IsDir: true},
+		{Name: "alpha.log", Path: "/tmp/alpha.log"},
+		{Name: "beta.txt", Path: "/tmp/beta.txt"},
+	}
+	m.remoteFiles = []fileItem{
+		{Name: "..", Path: "/", IsDir: true},
+		{Name: "remote-alpha", Path: "/remote-alpha"},
+		{Name: "remote-beta", Path: "/remote-beta"},
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	if !m.fileSearching {
+		t.Fatal("expected file search mode")
+	}
+	for _, r := range "beta" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	files := m.currentFiles()
+	if len(files) != 2 || files[1].Name != "beta.txt" {
+		t.Fatalf("filtered files = %+v, want parent plus beta.txt", files)
+	}
+	if m.remoteFileFilter != "" {
+		t.Fatalf("remote filter = %q, want empty", m.remoteFileFilter)
+	}
+}
+
+func TestFileManagerSearchSelectionOnlyAffectsVisibleItems(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localFiles = []fileItem{
+		{Name: "..", Path: "/tmp", IsDir: true},
+		{Name: "alpha.log", Path: "/tmp/alpha.log"},
+		{Name: "beta.txt", Path: "/tmp/beta.txt"},
+	}
+	m.localFileFilter = "beta"
+	m.localCursor = 1
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updated.(Model)
+	if m.localFiles[1].Selected {
+		t.Fatal("hidden alpha.log should not be selected")
+	}
+	if !m.localFiles[2].Selected {
+		t.Fatal("visible beta.txt should be selected")
+	}
+}
+
 func TestFileManagerEscDoesNotLeavePanel(t *testing.T) {
 	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), config.DefaultFile())
 	m.previous = app.StateServerList

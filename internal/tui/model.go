@@ -59,6 +59,10 @@ type Model struct {
 	activeServer          config.Server
 	searching             bool
 	searchInput           textinput.Model
+	fileSearching         bool
+	fileSearchInput       textinput.Model
+	localFileFilter       string
+	remoteFileFilter      string
 	renaming              bool
 	renameInput           textinput.Model
 	creatingDir           bool
@@ -129,6 +133,9 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 	m.searchInput = textinput.New()
 	m.searchInput.Placeholder = "filter by name, env, host, user, tag"
 	m.searchInput.CharLimit = 120
+	m.fileSearchInput = textinput.New()
+	m.fileSearchInput.Placeholder = "filter files"
+	m.fileSearchInput.CharLimit = 120
 	m.renameInput = textinput.New()
 	m.renameInput.CharLimit = 256
 	m.mkdirInput = textinput.New()
@@ -185,8 +192,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.localFiles = msg.local
 		m.remoteFiles = msg.remote
-		m.localCursor = clampCursor(m.localCursor, len(m.localFiles))
-		m.remoteCursor = clampCursor(m.remoteCursor, len(m.remoteFiles))
+		m.localCursor = clampCursor(m.localCursor, len(filteredFileItems(m.localFiles, m.localFileFilter)))
+		m.remoteCursor = clampCursor(m.remoteCursor, len(filteredFileItems(m.remoteFiles, m.remoteFileFilter)))
 	case transferStartedMsg:
 		if msg.err != nil {
 			m.err = msg.err.Error()
@@ -788,6 +795,23 @@ func (m *Model) openSettingsCenter() {
 }
 
 func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.fileSearching {
+		switch msg.String() {
+		case keyEsc:
+			m.fileSearching = false
+			m.fileSearchInput.Blur()
+			return m, nil
+		case keyEnter:
+			m.applyCurrentFileFilter(m.fileSearchInput.Value())
+			m.fileSearching = false
+			m.fileSearchInput.Blur()
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.fileSearchInput, cmd = m.fileSearchInput.Update(msg)
+			return m, cmd
+		}
+	}
 	if m.renaming {
 		switch msg.String() {
 		case keyEsc:
@@ -830,10 +854,15 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.runShellCmd()
 		}
 		m.state = app.StateServerList
+	case "/":
+		m.fileSearching = true
+		m.fileSearchInput.SetValue(m.currentFileFilter())
+		m.fileSearchInput.Focus()
+		return m, textinput.Blink
 	case "tab":
 		if m.config.Settings.DefaultViewMode != config.ViewSplit {
 			m.activePane = 1
-			m.remoteCursor = clampCursor(m.remoteCursor, len(m.remoteFiles))
+			m.remoteCursor = clampCursor(m.remoteCursor, len(filteredFileItems(m.remoteFiles, m.remoteFileFilter)))
 			return m, nil
 		}
 		m.activePane = 1 - m.activePane
@@ -855,7 +884,7 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.config.Settings.DefaultViewMode == config.ViewSplit {
 			m.config.Settings.DefaultViewMode = config.ViewSingle
 			m.activePane = 1
-			m.remoteCursor = clampCursor(m.remoteCursor, len(m.remoteFiles))
+			m.remoteCursor = clampCursor(m.remoteCursor, len(filteredFileItems(m.remoteFiles, m.remoteFileFilter)))
 		} else {
 			m.config.Settings.DefaultViewMode = config.ViewSplit
 		}
@@ -1145,12 +1174,12 @@ func (m *Model) refreshLocalFiles() {
 
 func (m Model) currentFiles() []fileItem {
 	if m.config.Settings.DefaultViewMode == config.ViewSingle {
-		return m.remoteFiles
+		return filteredFileItems(m.remoteFiles, m.remoteFileFilter)
 	}
 	if m.activePane == 0 {
-		return m.localFiles
+		return filteredFileItems(m.localFiles, m.localFileFilter)
 	}
-	return m.remoteFiles
+	return filteredFileItems(m.remoteFiles, m.remoteFileFilter)
 }
 
 func (m Model) currentFileCursor() int {
@@ -1162,37 +1191,84 @@ func (m Model) currentFileCursor() int {
 
 func (m *Model) setCurrentFileCursor(cursor int) {
 	if m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1 {
-		m.remoteCursor = clampCursor(cursor, len(m.remoteFiles))
+		m.remoteCursor = clampCursor(cursor, len(filteredFileItems(m.remoteFiles, m.remoteFileFilter)))
 		return
 	}
-	m.localCursor = clampCursor(cursor, len(m.localFiles))
+	m.localCursor = clampCursor(cursor, len(filteredFileItems(m.localFiles, m.localFileFilter)))
 }
 
 func (m *Model) toggleSelected() {
-	if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 && m.localCursor < len(m.localFiles) {
-		if m.localFiles[m.localCursor].Name == ".." {
-			return
-		}
-		m.localFiles[m.localCursor].Selected = !m.localFiles[m.localCursor].Selected
+	files := m.currentFiles()
+	cursor := m.currentFileCursor()
+	if cursor < 0 || cursor >= len(files) || files[cursor].Name == ".." {
+		return
 	}
-	if (m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1) && m.remoteCursor < len(m.remoteFiles) {
-		if m.remoteFiles[m.remoteCursor].Name == ".." {
+	targetPath := files[cursor].Path
+	if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 {
+		for i := range m.localFiles {
+			if m.localFiles[i].Path == targetPath {
+				m.localFiles[i].Selected = !m.localFiles[i].Selected
+				return
+			}
+		}
+	}
+	for i := range m.remoteFiles {
+		if m.remoteFiles[i].Path == targetPath {
+			m.remoteFiles[i].Selected = !m.remoteFiles[i].Selected
 			return
 		}
-		m.remoteFiles[m.remoteCursor].Selected = !m.remoteFiles[m.remoteCursor].Selected
 	}
 }
 
 func (m *Model) selectAll(selected bool) {
+	visible := m.currentFiles()
+	visiblePaths := map[string]bool{}
+	for _, item := range visible {
+		if item.Name != ".." {
+			visiblePaths[item.Path] = true
+		}
+	}
 	target := &m.localFiles
 	if m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1 {
 		target = &m.remoteFiles
 	}
 	for i := range *target {
-		if (*target)[i].Name != ".." {
+		if visiblePaths[(*target)[i].Path] {
 			(*target)[i].Selected = selected
 		}
 	}
+}
+
+func (m Model) currentFileFilter() string {
+	if m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1 {
+		return m.remoteFileFilter
+	}
+	return m.localFileFilter
+}
+
+func (m *Model) applyCurrentFileFilter(filter string) {
+	filter = strings.TrimSpace(filter)
+	if m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1 {
+		m.remoteFileFilter = filter
+		m.remoteCursor = 0
+		return
+	}
+	m.localFileFilter = filter
+	m.localCursor = 0
+}
+
+func filteredFileItems(items []fileItem, filter string) []fileItem {
+	filter = strings.ToLower(strings.TrimSpace(filter))
+	if filter == "" {
+		return items
+	}
+	out := make([]fileItem, 0, len(items))
+	for _, item := range items {
+		if item.Name == ".." || strings.Contains(strings.ToLower(item.Name), filter) {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func (m *Model) enterFile() {

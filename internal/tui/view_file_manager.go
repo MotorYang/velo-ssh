@@ -23,6 +23,8 @@ func (m Model) viewFileManager() string {
 	}
 	split := m.config.Settings.DefaultViewMode == config.ViewSplit
 	paneWidth := m.filePaneWidth(split)
+	localFiles := filteredFileItems(m.localFiles, m.localFileFilter)
+	remoteFiles := filteredFileItems(m.remoteFiles, m.remoteFileFilter)
 	fmt.Fprintln(&b, topBorder(m.fileManagerWidth(split), "File Manager"))
 	if !split {
 		marker := ">"
@@ -33,13 +35,23 @@ func (m Model) viewFileManager() string {
 		if m.ssh == nil {
 			fmt.Fprintln(&b, "  Remote pane requires an active SSH/SFTP connection.")
 		}
+		if m.fileSearching {
+			fmt.Fprintf(&b, "  Search input: %s\n", m.fileSearchInput.View())
+		}
+		if m.remoteFileFilter != "" {
+			fmt.Fprintf(&b, "  Search: %s\n", m.remoteFileFilter)
+		}
 		fmt.Fprintln(&b)
-		start, end := visibleFileRange(len(m.remoteFiles), m.remoteCursor, m.fileViewportRows())
-		fmt.Fprintf(&b, "REMOTE rows %d-%d/%d\n", displayStart(start, end), end, len(m.remoteFiles))
+		start, end := visibleFileRange(len(remoteFiles), m.remoteCursor, m.fileViewportRows())
+		fmt.Fprintf(&b, "REMOTE rows %d-%d/%d", displayStart(start, end), end, len(remoteFiles))
+		if m.remoteFileFilter != "" {
+			fmt.Fprintf(&b, " filtered from %d", len(m.remoteFiles))
+		}
+		fmt.Fprintln(&b)
 		fmt.Fprintln(&b, strings.Repeat("-", paneWidth))
 		fmt.Fprintln(&b, m.renderFileHeader(paneWidth))
 		for i := start; i < end; i++ {
-			item := m.remoteFiles[i]
+			item := remoteFiles[i]
 			fmt.Fprintln(&b, padVisual(m.renderFileRow(i, item, m.activePane == 1, m.remoteCursor, paneWidth), paneWidth))
 		}
 		if m.renaming {
@@ -55,13 +67,27 @@ func (m Model) viewFileManager() string {
 	if m.ssh == nil {
 		fmt.Fprintln(&b, "  Remote pane requires an active SSH/SFTP connection.")
 	}
+	if m.localFileFilter != "" || m.remoteFileFilter != "" || m.fileSearching {
+		leftSearch := m.localFileFilter
+		rightSearch := m.remoteFileFilter
+		if leftSearch == "" {
+			leftSearch = "-"
+		}
+		if rightSearch == "" {
+			rightSearch = "-"
+		}
+		if m.fileSearching {
+			fmt.Fprintf(&b, "  Search input: %s\n", m.fileSearchInput.View())
+		}
+		fmt.Fprintf(&b, "  Search LOCAL=%s REMOTE=%s\n", leftSearch, rightSearch)
+	}
 	fmt.Fprintln(&b)
 	rows := m.fileViewportRows()
-	localStart, localEnd := visibleFileRange(len(m.localFiles), m.localCursor, rows)
-	remoteStart, remoteEnd := visibleFileRange(len(m.remoteFiles), m.remoteCursor, rows)
+	localStart, localEnd := visibleFileRange(len(localFiles), m.localCursor, rows)
+	remoteStart, remoteEnd := visibleFileRange(len(remoteFiles), m.remoteCursor, rows)
 	fmt.Fprintf(&b, "%s | %s\n",
-		padVisual(fmt.Sprintf("LOCAL rows %d-%d/%d", displayStart(localStart, localEnd), localEnd, len(m.localFiles)), paneWidth),
-		padVisual(fmt.Sprintf("REMOTE rows %d-%d/%d", displayStart(remoteStart, remoteEnd), remoteEnd, len(m.remoteFiles)), paneWidth),
+		padVisual(m.fileRowsLabel("LOCAL", displayStart(localStart, localEnd), localEnd, len(localFiles), len(m.localFiles), m.localFileFilter), paneWidth),
+		padVisual(m.fileRowsLabel("REMOTE", displayStart(remoteStart, remoteEnd), remoteEnd, len(remoteFiles), len(m.remoteFiles), m.remoteFileFilter), paneWidth),
 	)
 	fmt.Fprintf(&b, "%s\n", strings.Repeat("-", paneWidth*2+3))
 	fmt.Fprintf(&b, "%s | %s\n", padVisual(m.renderFileHeader(paneWidth), paneWidth), padVisual(m.renderFileHeader(paneWidth), paneWidth))
@@ -70,11 +96,11 @@ func (m Model) viewFileManager() string {
 		right := ""
 		localIndex := localStart + row
 		remoteIndex := remoteStart + row
-		if localIndex < localEnd && localIndex < len(m.localFiles) {
-			left = m.renderFileRow(localIndex, m.localFiles[localIndex], m.activePane == 0, m.localCursor, paneWidth)
+		if localIndex < localEnd && localIndex < len(localFiles) {
+			left = m.renderFileRow(localIndex, localFiles[localIndex], m.activePane == 0, m.localCursor, paneWidth)
 		}
-		if remoteIndex < remoteEnd && remoteIndex < len(m.remoteFiles) {
-			right = m.renderFileRow(remoteIndex, m.remoteFiles[remoteIndex], m.activePane == 1, m.remoteCursor, paneWidth)
+		if remoteIndex < remoteEnd && remoteIndex < len(remoteFiles) {
+			right = m.renderFileRow(remoteIndex, remoteFiles[remoteIndex], m.activePane == 1, m.remoteCursor, paneWidth)
 		}
 		fmt.Fprintf(&b, "%s | %s\n", padVisual(left, paneWidth), padVisual(right, paneWidth))
 	}
@@ -86,6 +112,14 @@ func (m Model) viewFileManager() string {
 		fmt.Fprintf(&b, "New directory: %s\n", m.mkdirInput.View())
 	}
 	return b.String()
+}
+
+func (m Model) fileRowsLabel(label string, start, end, visible, total int, filter string) string {
+	text := fmt.Sprintf("%s rows %d-%d/%d", label, start, end, visible)
+	if filter != "" {
+		text += fmt.Sprintf(" filtered from %d", total)
+	}
+	return text
 }
 
 func (m Model) fileManagerWidth(split bool) int {
@@ -166,6 +200,9 @@ func (m Model) fileViewportRows() int {
 	}
 	rows := m.height - 10
 	if m.renaming || m.creatingDir {
+		rows -= 2
+	}
+	if m.fileSearching || m.localFileFilter != "" || m.remoteFileFilter != "" {
 		rows -= 2
 	}
 	if m.err != "" {

@@ -235,7 +235,7 @@ func (m Model) startUploadCmd(force bool, items []fileItem) tea.Cmd {
 			return transferStartedMsg{err: fmt.Errorf("ssh client is not connected")}
 		}
 		if len(items) == 0 {
-			items = selectedTransferItems(m.localFiles, m.localCursor)
+			items = selectedTransferItems(filteredFileItems(m.localFiles, m.localFileFilter), m.localCursor)
 		}
 		if len(items) == 0 {
 			return transferStartedMsg{err: fmt.Errorf("no local file selected for upload")}
@@ -281,7 +281,7 @@ func (m Model) startDownloadCmd(force bool, items []fileItem) tea.Cmd {
 			return transferStartedMsg{err: fmt.Errorf("ssh client is not connected")}
 		}
 		if len(items) == 0 {
-			items = selectedTransferItems(m.remoteFiles, m.remoteCursor)
+			items = selectedTransferItems(filteredFileItems(m.remoteFiles, m.remoteFileFilter), m.remoteCursor)
 		}
 		if len(items) == 0 {
 			return transferStartedMsg{err: fmt.Errorf("no remote file selected for download")}

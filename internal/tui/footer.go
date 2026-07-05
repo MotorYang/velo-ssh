@@ -83,6 +83,9 @@ func (m Model) helpText() string {
 	case app.StateSettingsCenter:
 		return ""
 	case app.StateFileManager:
+		if m.fileSearching {
+			return "[Enter] Apply File Search | [Esc] Cancel Search"
+		}
 		if m.renaming {
 			return "[Enter] Save Rename | [Esc] Cancel Rename"
 		}
@@ -90,9 +93,9 @@ func (m Model) helpText() string {
 			return "[Enter] Create Directory | [Esc] Cancel"
 		}
 		if m.config.Settings.DefaultViewMode == "single" {
-			return "[b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+			return "[/] Search | [b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
 		}
-		return "[Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+		return "[/] Search | [Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
 	case app.StateTaskCenter:
 		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [R] Refresh | [t]/[q]/[Esc] Back"
 	case app.StateConfirmModal:
