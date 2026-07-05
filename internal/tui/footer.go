@@ -99,6 +99,9 @@ func (m Model) helpText() string {
 	case app.StateTaskCenter:
 		return m.tr(textFooterTaskCenter)
 	case app.StateConfirmModal:
+		if m.modalKind == modalUpdateAvailable {
+			return m.tr(textUpdateAction) + " | " + m.tr(textFooterCancel) + " | " + m.tr(textSkipUpdateAction)
+		}
 		if m.modalKind == modalHostKey {
 			return m.tr(textTrustAndRetry)
 		}

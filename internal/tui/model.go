@@ -18,6 +18,8 @@ import (
 	"github.com/motoryang/velo-ssh/internal/sshnet"
 	"github.com/motoryang/velo-ssh/internal/term"
 	"github.com/motoryang/velo-ssh/internal/transfer"
+	"github.com/motoryang/velo-ssh/internal/updater"
+	"github.com/motoryang/velo-ssh/internal/version"
 )
 
 type fileItem struct {
@@ -83,6 +85,7 @@ type Model struct {
 	pendingTaskCancelID   string
 	pendingTaskCancelName string
 	pendingTaskReturn     app.AppState
+	pendingUpdate         updater.Release
 	clipboardFiles        []fileItem
 	clipboardRemote       bool
 }
@@ -148,6 +151,9 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.state == app.StateServerList && !m.config.Settings.DisableUpdateCheck {
+		return tea.Batch(textinput.Blink, m.checkUpdateCmd())
+	}
 	return textinput.Blink
 }
 
@@ -168,6 +174,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingHostKeyAction = msg.action
 		m.pendingHostKeyServer = msg.server
 		m.state = app.StateConfirmModal
+	case updateAvailableMsg:
+		if m.state == app.StateServerList && !m.config.Settings.DisableUpdateCheck && msg.release.Version != m.config.Settings.SkippedUpdateVersion {
+			m.previous = m.state
+			m.modalKind = modalUpdateAvailable
+			m.pendingUpdate = msg.release
+			m.state = app.StateConfirmModal
+		}
 	case shellConnectedMsg:
 		m.ssh = msg.client
 		m.activeServer = msg.server
@@ -683,6 +696,9 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.modalKind == modalServerFormDiscard {
 		return m.handleServerFormDiscardConfirmKey(msg)
 	}
+	if m.modalKind == modalUpdateAvailable {
+		return m.handleUpdateAvailableConfirmKey(msg)
+	}
 	switch msg.String() {
 	case keyEsc, "n", "N":
 		m.state = m.previous
@@ -719,6 +735,40 @@ func (m Model) handleServerFormDiscardConfirmKey(msg tea.KeyMsg) (tea.Model, tea
 		m.status = m.tr(textServerDiscarded)
 	}
 	return m, nil
+}
+
+func (m Model) handleUpdateAvailableConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEsc, "n", "N":
+		m.status = m.tr(textUpdateCanceled)
+		m.clearUpdatePrompt()
+		m.state = m.previous
+	case "s", "S":
+		versionToSkip := m.pendingUpdate.Version
+		m.config.Settings.SkippedUpdateVersion = versionToSkip
+		if err := m.store.Save(m.config); err != nil {
+			m.err = err.Error()
+			return m, nil
+		}
+		m.status = fmt.Sprintf(m.tr(textUpdateSkipped), versionToSkip)
+		m.clearUpdatePrompt()
+		m.state = m.previous
+	case keyEnter, "u", "U":
+		releaseURL := m.pendingUpdate.URL
+		if err := updater.OpenURL(releaseURL); err != nil {
+			m.err = fmt.Sprintf(m.tr(textUpdateOpenFailed), err)
+			return m, nil
+		}
+		m.status = fmt.Sprintf(m.tr(textUpdateOpenBrowser), releaseURL)
+		m.clearUpdatePrompt()
+		m.state = m.previous
+	}
+	return m, nil
+}
+
+func (m *Model) clearUpdatePrompt() {
+	m.modalKind = ""
+	m.pendingUpdate = updater.Release{}
 }
 
 func (m Model) handleOverwriteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -875,6 +925,7 @@ func (m Model) saveSettingsForm() (tea.Model, tea.Cmd) {
 		m.err = err.Error()
 		return m, nil
 	}
+	settings.SkippedUpdateVersion = m.config.Settings.SkippedUpdateVersion
 	m.config.Settings = settings
 	if err := m.store.Save(m.config); err != nil {
 		m.err = err.Error()
@@ -1073,6 +1124,7 @@ func (m Model) connectShellCmd(srv config.Server) tea.Cmd {
 }
 
 type errMsg struct{ err error }
+type updateAvailableMsg struct{ release updater.Release }
 type hostKeyPromptMsg struct {
 	err    *sshnet.UnknownHostKeyError
 	server config.Server
@@ -1100,6 +1152,20 @@ type overwritePromptMsg struct {
 	items     []fileItem
 	targets   []string
 }
+
+func (m Model) checkUpdateCmd() tea.Cmd {
+	return func() tea.Msg {
+		rel, newer, err := updater.CheckLatest(context.Background(), version.String())
+		if err != nil || !newer {
+			return nil
+		}
+		if rel.Version == m.config.Settings.SkippedUpdateVersion {
+			return nil
+		}
+		return updateAvailableMsg{release: rel}
+	}
+}
+
 type taskTickMsg struct{}
 type shellFinishedMsg struct {
 	action sshnet.EscapeResult

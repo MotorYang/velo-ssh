@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/motoryang/velo-ssh/internal/term"
+	"github.com/motoryang/velo-ssh/internal/version"
 )
 
 const (
@@ -13,6 +14,7 @@ const (
 	modalFileDelete        = "file_delete"
 	modalTaskCancel        = "task_cancel"
 	modalServerFormDiscard = "server_form_discard"
+	modalUpdateAvailable   = "update_available"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -112,7 +114,22 @@ func (m Model) viewServerFormDiscardConfirm() string {
 	)
 }
 
+func (m Model) viewUpdateAvailableConfirm() string {
+	rel := m.pendingUpdate
+	return m.viewModal(
+		m.tr(textUpdateAvailablePrompt) + "\n\n" +
+			m.tr(textUpdateCurrent) + ": " + version.String() + "\n" +
+			m.tr(textUpdateLatest) + ": " + rel.Version + "\n\n" +
+			m.tr(textUpdateBody) + "\n" +
+			rel.URL + "\n\n" +
+			m.tr(textUpdateAction) + " | " + m.tr(textFooterCancel) + " | " + m.tr(textSkipUpdateAction),
+	)
+}
+
 func (m Model) viewConfirmModal() string {
+	if m.modalKind == modalUpdateAvailable {
+		return m.viewUpdateAvailableConfirm()
+	}
 	if m.modalKind == modalHostKey {
 		return m.viewHostKeyConfirm()
 	}

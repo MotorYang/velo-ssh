@@ -74,6 +74,17 @@ const (
 	textModifiedColumn          = "file.column.modified"
 	textTaskCenterTitle         = "task.title"
 	textNoTransferTasks         = "task.none"
+	textVersion                 = "app.version"
+	textUpdateAvailablePrompt   = "update.available"
+	textUpdateCurrent           = "update.current"
+	textUpdateLatest            = "update.latest"
+	textUpdateBody              = "update.body"
+	textUpdateAction            = "update.action"
+	textSkipUpdateAction        = "update.skip"
+	textUpdateCanceled          = "update.canceled"
+	textUpdateSkipped           = "update.skipped"
+	textUpdateOpenFailed        = "update.openFailed"
+	textUpdateOpenBrowser       = "update.openBrowser"
 	textFooterFileSearch        = "footer.file.search"
 	textFooterRename            = "footer.file.rename"
 	textFooterCreateDir         = "footer.file.createDir"
@@ -154,6 +165,17 @@ var zhText = map[string]string{
 	textModifiedColumn:          "修改时间",
 	textTaskCenterTitle:         "任务中心",
 	textNoTransferTasks:         "没有传输任务。",
+	textVersion:                 "版本",
+	textUpdateAvailablePrompt:   "发现新版本",
+	textUpdateCurrent:           "当前版本",
+	textUpdateLatest:            "最新版本",
+	textUpdateBody:              "选择更新会打开 GitHub Release 页面。",
+	textUpdateAction:            "[Enter]/[u] 更新",
+	textSkipUpdateAction:        "[s] 跳过本次版本",
+	textUpdateCanceled:          "已取消本次更新。",
+	textUpdateSkipped:           "已跳过版本 %s。",
+	textUpdateOpenFailed:        "打开更新页面失败：%v",
+	textUpdateOpenBrowser:       "已打开更新页面：%s",
 	textFooterFileSearch:        "[Enter] 应用文件搜索 | [Esc] 取消搜索",
 	textFooterRename:            "[Enter] 保存重命名 | [Esc] 取消重命名",
 	textFooterCreateDir:         "[Enter] 创建目录 | [Esc] 取消",
@@ -315,6 +337,28 @@ func enText(key string) string {
 		return "Task Center"
 	case textNoTransferTasks:
 		return "No transfer tasks."
+	case textVersion:
+		return "Version"
+	case textUpdateAvailablePrompt:
+		return "Update available"
+	case textUpdateCurrent:
+		return "Current"
+	case textUpdateLatest:
+		return "Latest"
+	case textUpdateBody:
+		return "Choose update to open the GitHub Release page."
+	case textUpdateAction:
+		return "[Enter]/[u] Update"
+	case textSkipUpdateAction:
+		return "[s] Skip this version"
+	case textUpdateCanceled:
+		return "Update canceled."
+	case textUpdateSkipped:
+		return "Skipped version %s."
+	case textUpdateOpenFailed:
+		return "Open update page failed: %v"
+	case textUpdateOpenBrowser:
+		return "Opened update page: %s"
 	case textFooterFileSearch:
 		return "[Enter] Apply File Search | [Esc] Cancel Search"
 	case textFooterRename:
@@ -393,6 +437,8 @@ func settingsLabel(index int, language string) string {
 			return "覆盖前确认"
 		case settingsFieldKnownHostsPolicy:
 			return "Known Hosts 策略"
+		case settingsFieldCheckUpdates:
+			return "检查更新"
 		}
 	}
 	return settingsFormLabels[index]

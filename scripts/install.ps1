@@ -12,6 +12,11 @@ if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
 
 $RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
 $BinPath = Join-Path $InstallDir "$AppName.exe"
+$VersionPath = Join-Path $RootDir "VERSION"
+if ([string]::IsNullOrWhiteSpace($VersionLdflags) -and (Test-Path $VersionPath)) {
+    $Version = (Get-Content $VersionPath -Raw).Trim()
+    $VersionLdflags = "-X github.com/motoryang/velo-ssh/internal/version.Current=$Version"
+}
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Write-Host "Building $AppName..."

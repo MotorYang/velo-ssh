@@ -21,6 +21,9 @@ func TestStoreLoadMissingReturnsDefaults(t *testing.T) {
 	if cfg.Settings.Language != LanguageEnglish {
 		t.Fatalf("default language = %q, want en", cfg.Settings.Language)
 	}
+	if cfg.Settings.DisableUpdateCheck {
+		t.Fatalf("update checks should be enabled by default")
+	}
 	if len(cfg.Servers) != 0 {
 		t.Fatalf("servers = %d, want 0", len(cfg.Servers))
 	}

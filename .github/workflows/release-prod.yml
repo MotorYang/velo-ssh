@@ -77,9 +77,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          VERSION="${GITHUB_REF_NAME}-${GITHUB_SHA::7}"
+          VERSION="$(cat VERSION)"
           OUT="dist/velossh-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
-          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" .
+          go build -trimpath -ldflags "-s -w -X github.com/motoryang/velo-ssh/internal/version.Current=${VERSION}" -o "${OUT}" .
 
       - name: Package
         shell: bash
@@ -106,19 +106,38 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
+      - name: Read version
+        id: version
+        run: echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          awk -v version="$VERSION" '
+            $0 == "## " version { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "Release ${VERSION}" > release-notes.md
+          fi
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: prod-${{ github.run_number }}
-          name: Prod ${{ github.run_number }}
+          tag_name: ${{ steps.version.outputs.value }}
+          name: ${{ steps.version.outputs.value }}
           target_commitish: ${{ github.sha }}
           files: dist/*
-          generate_release_notes: true
+          body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
