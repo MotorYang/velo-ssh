@@ -81,12 +81,19 @@ func (c *Client) Connect(ctx context.Context, srv config.Server) error {
 
 func (c *Client) OpenSFTP(ctx context.Context) (*sftp.Client, error) {
 	c.mu.Lock()
+	stale := c.stale
 	if c.sftp != nil {
 		defer c.mu.Unlock()
+		if stale {
+			return nil, fmt.Errorf("stale connection: ssh keepalive failed")
+		}
 		return c.sftp, nil
 	}
 	client := c.ssh
 	c.mu.Unlock()
+	if stale {
+		return nil, fmt.Errorf("stale connection: ssh keepalive failed")
+	}
 	if client == nil {
 		return nil, fmt.Errorf("open sftp: ssh client is not connected")
 	}
@@ -122,7 +129,11 @@ func (c *Client) OpenSFTP(ctx context.Context) (*sftp.Client, error) {
 func (c *Client) OpenShell(ctx context.Context, size PtySize) (*Shell, error) {
 	c.mu.Lock()
 	client := c.ssh
+	stale := c.stale
 	c.mu.Unlock()
+	if stale {
+		return nil, fmt.Errorf("stale connection: ssh keepalive failed")
+	}
 	if client == nil {
 		return nil, fmt.Errorf("open shell: ssh client is not connected")
 	}

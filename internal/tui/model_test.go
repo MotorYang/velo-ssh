@@ -20,7 +20,7 @@ func TestSmallTerminalFallback(t *testing.T) {
 	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), config.DefaultFile())
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
 	got := updated.(Model).View()
-	if !strings.Contains(got, "Terminal too small") {
+	if !strings.Contains(got, "terminal too small") || !strings.Contains(got, "80x24") {
 		t.Fatalf("expected small terminal warning, got %q", got)
 	}
 }

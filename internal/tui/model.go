@@ -148,7 +148,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.ssh.WindowChange(msg.Height, msg.Width)
 		}
 	case errMsg:
-		m.err = msg.err.Error()
+		m.err = displayError(msg.err)
 	case hostKeyPromptMsg:
 		m.previous = m.state
 		m.modalKind = modalHostKey
@@ -251,7 +251,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.width > 0 && (m.width < 80 || m.height < 24) {
-		return "Terminal too small. Please resize to at least 80x24.\n"
+		return "Action failed: target=terminal, reason=terminal too small. Recovery: resize to at least 80x24.\n"
 	}
 	var body string
 	switch m.state {

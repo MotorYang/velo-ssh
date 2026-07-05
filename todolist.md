@@ -144,14 +144,14 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Include target server/path in user-facing errors.
 - [x] Include underlying reason in user-facing errors.
 - [x] Include recovery action when practical.
-- [ ] Improve authentication failure error text.
-- [ ] Improve host key mismatch error text.
-- [ ] Improve connection timeout error text.
-- [ ] Improve permission denied error text.
-- [ ] Improve keyring unavailable error text.
-- [ ] Improve terminal too small error text.
-- [ ] Improve task canceled error text.
-- [ ] Improve stale connection error text.
+- [x] Improve authentication failure error text.
+- [x] Improve host key mismatch error text.
+- [x] Improve connection timeout error text.
+- [x] Improve permission denied error text.
+- [x] Improve keyring unavailable error text.
+- [x] Improve terminal too small error text.
+- [x] Improve task canceled error text.
+- [x] Improve stale connection error text.
 
 ## Lifecycle And Reliability
 
