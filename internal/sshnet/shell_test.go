@@ -193,6 +193,43 @@ func TestShellInputHelpUsesConfiguredLanguage(t *testing.T) {
 	}
 }
 
+func TestShellInputExitLineQuitsAfterSendingRemote(t *testing.T) {
+	tests := []string{"exit\n", "exit 0\n"}
+	for _, input := range tests {
+		var remote bytes.Buffer
+		var got EscapeResult
+		localExit, err := runShellInput(strings.NewReader(input), &remote, &bytes.Buffer{}, func(res EscapeResult) {
+			got = res
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !localExit {
+			t.Fatalf("input %q should exit shell", input)
+		}
+		if got.Command != "quit" {
+			t.Fatalf("input %q command = %q, want quit", input, got.Command)
+		}
+		if remote.String() != strings.TrimSuffix(input, "\n")+"\n" && remote.String() != strings.TrimSuffix(input, "\n")+"\r" {
+			t.Fatalf("remote got %q, want exit line sent", remote.String())
+		}
+	}
+}
+
+func TestShellInputNonExitLineDoesNotQuit(t *testing.T) {
+	var remote bytes.Buffer
+	localExit, err := runShellInput(strings.NewReader("echo exit\n"), &remote, &bytes.Buffer{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if localExit {
+		t.Fatal("echo exit should not exit shell")
+	}
+	if remote.String() != "echo exit\n" {
+		t.Fatalf("remote got %q", remote.String())
+	}
+}
+
 func TestShellInputLocalCommandWithCRLFDoesNotLeakLF(t *testing.T) {
 	var remote bytes.Buffer
 	localExit, err := runShellInput(strings.NewReader(":vssh files\r\n"), &remote, &bytes.Buffer{}, nil)

@@ -165,6 +165,7 @@ func runShellInputWithHelp(in io.Reader, remote io.Writer, errOut io.Writer, onL
 	buf := make([]byte, 1)
 	capturing := false
 	candidate := ""
+	remoteLine := ""
 	skipLF := false
 	escapeSeq := false
 	escapeSeqIntroducer := false
@@ -247,6 +248,24 @@ func runShellInputWithHelp(in io.Reader, remote io.Writer, errOut io.Writer, onL
 				continue
 			}
 			_, _ = remote.Write([]byte{b})
+			if isBackspace(b) {
+				if len(remoteLine) > 0 {
+					remoteLine = remoteLine[:len(remoteLine)-1]
+				}
+				continue
+			}
+			remoteLine += string(b)
+			if isLineBreak(b) {
+				line := normalizeLocalCandidate(strings.TrimRight(remoteLine, "\r\n"))
+				remoteLine = ""
+				if isRemoteExitLine(line) {
+					res := EscapeResult{Local: true, Command: "quit"}
+					if onLocal != nil {
+						onLocal(res)
+					}
+					return true, nil
+				}
+			}
 			skipLF = b == '\r'
 		}
 		if err == io.EOF {
@@ -309,6 +328,11 @@ func normalizeLocalCandidate(s string) string {
 	s = strings.ReplaceAll(s, "\x1b[200~", "")
 	s = strings.ReplaceAll(s, "\x1b[201~", "")
 	return s
+}
+
+func isRemoteExitLine(line string) bool {
+	fields := strings.Fields(line)
+	return len(fields) > 0 && fields[0] == "exit"
 }
 
 func waitGroupWithTimeout(wg *sync.WaitGroup, timeout time.Duration) {
