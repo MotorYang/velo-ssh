@@ -1,2 +1,4 @@
 .DS_Store
 velo-ssh
+velo-ssh-*
+dist/

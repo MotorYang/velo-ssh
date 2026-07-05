@@ -143,7 +143,11 @@ func AcceptHostKey(err *UnknownHostKeyError) error {
 }
 
 func defaultKnownHostsPath() string {
-	return filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	return filepath.Join(home, ".ssh", "known_hosts")
 }
 
 func remoteString(remote net.Addr) string {
