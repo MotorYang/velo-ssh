@@ -593,6 +593,28 @@ func TestTaskCenterMoveAndCancelWithConfirm(t *testing.T) {
 	}
 }
 
+func TestTaskCenterCancelPreservesBackTarget(t *testing.T) {
+	m := NewModel(app.StateTaskCenter, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.previous = app.StateFileManager
+	m.tasks.Add(transfer.NewTask("task-a", transfer.Upload, "/local/a", "/remote/a"))
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(Model)
+	if m.state != app.StateConfirmModal {
+		t.Fatalf("state after x = %s, want confirm modal", m.state)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.state != app.StateTaskCenter {
+		t.Fatalf("state after confirm = %s, want task center", m.state)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = updated.(Model)
+	if m.state != app.StateFileManager {
+		t.Fatalf("state after q = %s, want file manager", m.state)
+	}
+}
+
 func TestTaskCenterPauseAndResume(t *testing.T) {
 	m := NewModel(app.StateTaskCenter, config.NewStore(t.TempDir()), config.DefaultFile())
 	task := transfer.NewTask("task-a", transfer.Upload, "/local/a", "/remote/a")

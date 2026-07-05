@@ -78,6 +78,7 @@ type Model struct {
 	pendingDeleteRemote   bool
 	pendingTaskCancelID   string
 	pendingTaskCancelName string
+	pendingTaskReturn     app.AppState
 	clipboardFiles        []fileItem
 	clipboardRemote       bool
 }
@@ -337,10 +338,12 @@ func (m Model) handleTaskCenterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		task := tasks[m.taskCursor]
+		returnState := m.previous
 		m.previous = m.state
 		m.modalKind = modalTaskCancel
 		m.pendingTaskCancelID = task.ID
 		m.pendingTaskCancelName = fmt.Sprintf("%s %s -> %s", task.Direction, task.SourcePath, task.TargetPath)
+		m.pendingTaskReturn = returnState
 		m.state = app.StateConfirmModal
 	case "p":
 		if len(tasks) == 0 {
@@ -664,12 +667,16 @@ func (m Model) handleTaskCancelConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEsc, "n", "N":
 		m.status = "Task cancel aborted."
-		m.clearTaskCancelPrompt()
-		m.state = m.previous
-	case keyEnter, "y", "Y":
-		id := m.pendingTaskCancelID
+		returnState := m.pendingTaskReturn
 		m.clearTaskCancelPrompt()
 		m.state = app.StateTaskCenter
+		m.previous = returnState
+	case keyEnter, "y", "Y":
+		id := m.pendingTaskCancelID
+		returnState := m.pendingTaskReturn
+		m.clearTaskCancelPrompt()
+		m.state = app.StateTaskCenter
+		m.previous = returnState
 		if err := m.tasks.CancelAndRemove(id); err != nil {
 			m.err = err.Error()
 			return m, nil
@@ -684,6 +691,7 @@ func (m *Model) clearTaskCancelPrompt() {
 	m.modalKind = ""
 	m.pendingTaskCancelID = ""
 	m.pendingTaskCancelName = ""
+	m.pendingTaskReturn = app.StateServerList
 }
 
 func (m Model) handleHostKeyConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
