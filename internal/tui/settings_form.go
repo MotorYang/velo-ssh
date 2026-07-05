@@ -17,6 +17,7 @@ const (
 	settingsFieldTransferConcurrency
 	settingsFieldKeepAliveSeconds
 	settingsFieldTheme
+	settingsFieldLanguage
 	settingsFieldConfirmOverwrite
 	settingsFieldKnownHostsPolicy
 )
@@ -29,6 +30,7 @@ var settingsFormLabels = []string{
 	"Transfer Concurrency",
 	"KeepAlive Seconds",
 	"Theme",
+	"Language",
 	"Confirm Overwrite",
 	"Known Hosts Policy",
 }
@@ -36,6 +38,7 @@ var settingsFormLabels = []string{
 var settingsFieldOptions = map[int][]string{
 	settingsFieldDefaultViewMode:  {config.ViewSingle, config.ViewSplit},
 	settingsFieldASCIIFallback:    {config.ASCIIFallbackAuto, config.ASCIIFallbackAlways, config.ASCIIFallbackDisabled},
+	settingsFieldLanguage:         {config.LanguageEnglish, config.LanguageSimplifiedChinese},
 	settingsFieldConfirmOverwrite: {"true", "false"},
 	settingsFieldKnownHostsPolicy: {config.HostKeyStrict, config.HostKeyAsk, config.HostKeyInsecure},
 }
@@ -54,6 +57,7 @@ func newSettingsForm(settings config.Settings) settingsForm {
 		strconv.Itoa(defaultInt(settings.TransferConcurrency, 4)),
 		strconv.Itoa(defaultInt(settings.KeepAliveSeconds, 20)),
 		defaultString(settings.Theme, "default"),
+		defaultString(settings.Language, config.LanguageEnglish),
 		strconv.FormatBool(settings.ConfirmOverwrite),
 		defaultString(settings.KnownHostsPolicy, config.HostKeyAsk),
 	}
@@ -187,6 +191,10 @@ func (f settingsForm) settings() (config.Settings, error) {
 	if theme == "" {
 		return config.Settings{}, fmt.Errorf("theme cannot be empty")
 	}
+	language := strings.TrimSpace(f.fields[settingsFieldLanguage].Value())
+	if !oneOf(language, config.LanguageEnglish, config.LanguageSimplifiedChinese) {
+		return config.Settings{}, fmt.Errorf("language must be en or zh-CN")
+	}
 	confirmOverwrite, err := parseBool(f.fields[settingsFieldConfirmOverwrite].Value(), "confirmOverwrite")
 	if err != nil {
 		return config.Settings{}, err
@@ -203,6 +211,7 @@ func (f settingsForm) settings() (config.Settings, error) {
 		TransferConcurrency: transferConcurrency,
 		KeepAliveSeconds:    keepAliveSeconds,
 		Theme:               theme,
+		Language:            language,
 		ConfirmOverwrite:    confirmOverwrite,
 		KnownHostsPolicy:    knownHostsPolicy,
 	}, nil

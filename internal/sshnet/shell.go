@@ -18,6 +18,7 @@ type Shell struct {
 	stdin   io.WriteCloser
 	stdout  io.Reader
 	stderr  io.Reader
+	help    string
 	once    sync.Once
 	wg      sync.WaitGroup
 	mu      sync.Mutex
@@ -41,7 +42,11 @@ func (s *Shell) Run(in *os.File, out, errOut *os.File, onLocal func(EscapeResult
 	s.startPumps()
 	s.attach(out, errOut)
 	defer s.detach()
-	localExit, runErr := runShellInput(in, s.stdin, errOut, onLocal)
+	help := s.help
+	if help == "" {
+		help = EscapeHelp()
+	}
+	localExit, runErr := runShellInputWithHelp(in, s.stdin, errOut, onLocal, help)
 	if localExit {
 		return runErr
 	}
@@ -153,6 +158,10 @@ func (s *Shell) Closed() bool {
 }
 
 func runShellInput(in io.Reader, remote io.Writer, errOut io.Writer, onLocal func(EscapeResult)) (bool, error) {
+	return runShellInputWithHelp(in, remote, errOut, onLocal, EscapeHelp())
+}
+
+func runShellInputWithHelp(in io.Reader, remote io.Writer, errOut io.Writer, onLocal func(EscapeResult), helpText string) (bool, error) {
 	buf := make([]byte, 1)
 	capturing := false
 	candidate := ""
@@ -207,7 +216,7 @@ func runShellInput(in io.Reader, remote io.Writer, errOut io.Writer, onLocal fun
 							_, _ = fmt.Fprintln(remote, res.Arg)
 						} else {
 							if res.Help || res.Unknown {
-								writeLocalMessage(errOut, EscapeHelp())
+								writeLocalMessage(errOut, helpText)
 							}
 							if onLocal != nil {
 								onLocal(res)

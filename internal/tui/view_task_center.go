@@ -14,7 +14,7 @@ func (m Model) viewTaskCenter() string {
 	body := []string{}
 	tasks := m.taskSnapshots()
 	if len(tasks) == 0 {
-		body = append(body, "No transfer tasks.")
+		body = append(body, m.tr(textNoTransferTasks))
 	}
 	cursor := clampCursor(m.taskCursor, len(tasks))
 	for i, task := range tasks {
@@ -45,7 +45,7 @@ func (m Model) viewTaskCenter() string {
 		}
 		body = append(body, line)
 	}
-	return borderedBlock("Task Center", width, body)
+	return borderedBlock(m.tr(textTaskCenterTitle), width, body)
 }
 
 func (m Model) taskSnapshots() []*transfer.Task {

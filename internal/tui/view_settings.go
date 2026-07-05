@@ -19,8 +19,8 @@ func (m Model) settingsPanelLines() []string {
 	innerWidth := settingsPanelWidth - 2
 	lines := []string{
 		"+" + strings.Repeat("-", innerWidth) + "+",
-		"|" + centerPlain("VeloSSH Settings", innerWidth) + "|",
-		"|" + centerPlain("Tab/Up/Down move focus. Left/Right or Space changes options. Enter OK/Cancel.", innerWidth) + "|",
+		"|" + centerPlain(m.tr(textSettingsTitle), innerWidth) + "|",
+		"|" + centerPlain(m.tr(textSettingsGuide), innerWidth) + "|",
 		"|" + strings.Repeat(" ", innerWidth) + "|",
 	}
 	for i, field := range m.settingsForm.fields {
@@ -30,9 +30,9 @@ func (m Model) settingsPanelLines() []string {
 		}
 		value := field.View()
 		if _, ok := settingsFieldOptions[i]; ok {
-			value = optionDisplay(field.Value())
+			value = optionDisplay(i, field.Value())
 		}
-		row := fmt.Sprintf("%s%-26s %s", prefix, settingsFormLabels[i], value)
+		row := prefix + padVisual(settingsLabel(i, m.config.Settings.Language), 26) + " " + value
 		if i == m.settingsForm.index {
 			row = m.styles.selected.Render(row)
 		}
@@ -45,8 +45,8 @@ func (m Model) settingsPanelLines() []string {
 }
 
 func (m Model) settingsButtons() string {
-	ok := "[ OK ]"
-	cancel := "[ Cancel ]"
+	ok := "[ " + m.tr(textSettingsOK) + " ]"
+	cancel := "[ " + m.tr(textSettingsCancel) + " ]"
 	if m.settingsForm.okFocused() {
 		ok = m.styles.selected.Render(ok)
 	}
@@ -56,8 +56,8 @@ func (m Model) settingsButtons() string {
 	return ok + "   " + cancel
 }
 
-func optionDisplay(value string) string {
-	return fmt.Sprintf("< %-10s >", value)
+func optionDisplay(field int, value string) string {
+	return fmt.Sprintf("< %-10s >", optionLabel(field, value))
 }
 
 func centerBlock(lines []string, width, height int) string {

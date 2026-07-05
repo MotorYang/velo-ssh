@@ -14,16 +14,16 @@ func (m Model) viewServerList() string {
 	inner := width - 2
 	body := []string{}
 	if m.searching {
-		body = append(body, "Search: "+m.searchInput.View())
+		body = append(body, m.tr(textSearch)+": "+m.searchInput.View())
 	} else if m.filter != "" {
-		body = append(body, "Filter: "+m.filter)
+		body = append(body, m.tr(textFilter)+": "+m.filter)
 	} else {
-		body = append(body, "Filter: -")
+		body = append(body, m.tr(textFilter)+": -")
 	}
 	body = append(body, blankLine(inner))
 	servers := m.filteredServers()
 	if len(servers) == 0 {
-		body = append(body, "No servers configured or matched.")
+		body = append(body, m.tr(textNoServers))
 	} else {
 		groups, names := groupedServersByTag(servers)
 		for groupIndex, name := range names {
@@ -49,7 +49,7 @@ func (m Model) viewServerList() string {
 			}
 		}
 	}
-	return borderedBlock("VeloSSH Manager", width, body)
+	return borderedBlock(m.tr(textManagerTitle), width, body)
 }
 
 func defaultServerEnv(env string) string {

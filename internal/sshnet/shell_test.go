@@ -175,6 +175,24 @@ func TestShellInputUnknownShowsHelpWithoutSendingRemote(t *testing.T) {
 	}
 }
 
+func TestShellInputHelpUsesConfiguredLanguage(t *testing.T) {
+	var remote bytes.Buffer
+	var errOut bytes.Buffer
+	localExit, err := runShellInputWithHelp(strings.NewReader(":vssh help\n"), &remote, &errOut, nil, EscapeHelpWithLanguage("zh-CN"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if localExit {
+		t.Fatal("help should not exit shell")
+	}
+	if remote.String() != "" {
+		t.Fatalf("remote got %q, want empty", remote.String())
+	}
+	if !strings.Contains(errOut.String(), "VeloSSH 本地命令") || !strings.Contains(errOut.String(), "切换到文件管理器") {
+		t.Fatalf("missing chinese help output: %q", errOut.String())
+	}
+}
+
 func TestShellInputLocalCommandWithCRLFDoesNotLeakLF(t *testing.T) {
 	var remote bytes.Buffer
 	localExit, err := runShellInput(strings.NewReader(":vssh files\r\n"), &remote, &bytes.Buffer{}, nil)

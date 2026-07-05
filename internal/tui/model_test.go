@@ -145,6 +145,21 @@ func TestServerListGroupsByTagWithDefaultFallback(t *testing.T) {
 	}
 }
 
+func TestServerListUsesChineseWhenLanguageIsSimplifiedChinese(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.Language = config.LanguageSimplifiedChinese
+	cfg.Servers = []config.Server{{ID: "dev", Name: "Dev", Env: "dev", Host: "127.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent}}
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
+	m.width = 100
+	m.height = 30
+	got := m.View()
+	for _, want := range []string{"VeloSSH 服务器管理", "筛选", "新增/编辑/克隆/删除"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("server list zh view missing %q in %q", want, got)
+		}
+	}
+}
+
 func TestServerCloneCreatesNewIDAndCopiesSecret(t *testing.T) {
 	store := config.NewStore(t.TempDir())
 	cfg := config.DefaultFile()
@@ -212,6 +227,42 @@ func TestServerFormEscPromptsWhenDirty(t *testing.T) {
 	m = updated.(Model)
 	if m.state != app.StateServerList || m.modalKind != "" {
 		t.Fatalf("state after discard=%s modal=%s, want server list", m.state, m.modalKind)
+	}
+}
+
+func TestServerFormUsesChineseLabels(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.Language = config.LanguageSimplifiedChinese
+	m := NewModel(app.StateServerForm, config.NewStore(t.TempDir()), cfg)
+	m.form = newServerForm("add", config.Server{Port: 22, AuthType: config.AuthPassword})
+	got := m.viewServerForm()
+	for _, want := range []string{"新增服务器", "名称", "环境", "认证类型", "密码", "ID 会自动生成"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("server form zh view missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(got, "Add Server") || strings.Contains(got, "Name:") || strings.Contains(got, "Password:") {
+		t.Fatalf("server form zh view still contains English labels: %q", got)
+	}
+}
+
+func TestConfirmModalUsesChineseText(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.Language = config.LanguageSimplifiedChinese
+	m := NewModel(app.StateConfirmModal, config.NewStore(t.TempDir()), cfg)
+	m.width = 100
+	m.height = 30
+	m.modalKind = modalDelete
+	m.deleteName = "测试服务器"
+	m.deleteID = "test"
+	got := m.viewConfirmModal()
+	for _, want := range []string{"确认", "删除服务器", "这会从 ~/.config/vssh/config.json 中移除该服务器"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("confirm zh view missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(got, "Delete server") || strings.Contains(got, "This removes it") {
+		t.Fatalf("confirm zh view still contains English prompt: %q", got)
 	}
 }
 
@@ -1194,6 +1245,7 @@ func TestSettingsFormEditsAllFields(t *testing.T) {
 	m.settingsForm.fields[settingsFieldTransferConcurrency].SetValue("8")
 	m.settingsForm.fields[settingsFieldKeepAliveSeconds].SetValue("45")
 	m.settingsForm.fields[settingsFieldTheme].SetValue("compact")
+	m.settingsForm.fields[settingsFieldLanguage].SetValue(config.LanguageSimplifiedChinese)
 	m.settingsForm.fields[settingsFieldConfirmOverwrite].SetValue("false")
 	m.settingsForm.fields[settingsFieldKnownHostsPolicy].SetValue(config.HostKeyStrict)
 	m.settingsForm.blurCurrent()
@@ -1215,6 +1267,7 @@ func TestSettingsFormEditsAllFields(t *testing.T) {
 		saved.Settings.TransferConcurrency != 8 ||
 		saved.Settings.KeepAliveSeconds != 45 ||
 		saved.Settings.Theme != "compact" ||
+		saved.Settings.Language != config.LanguageSimplifiedChinese ||
 		saved.Settings.ConfirmOverwrite ||
 		saved.Settings.KnownHostsPolicy != config.HostKeyStrict {
 		t.Fatalf("saved settings = %+v", saved.Settings)
@@ -1265,6 +1318,31 @@ func TestSettingsViewIsCenteredPanelWithButtons(t *testing.T) {
 	}
 	if strings.Contains(got, "Toggle ASCII") || strings.Contains(got, "[s]/[Enter] Save") {
 		t.Fatalf("settings view should not render shortcut footer: %q", got)
+	}
+}
+
+func TestSettingsLanguageOptionAndChineseLabels(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.Language = config.LanguageSimplifiedChinese
+	m := NewModel(app.StateSettingsCenter, config.NewStore(t.TempDir()), cfg)
+	m.width = 120
+	m.height = 40
+	got := m.View()
+	for _, want := range []string{"VeloSSH 设置", "语言", "< 简体中文", "[ 确定 ]", "[ 取消 ]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("settings zh view missing %q in %q", want, got)
+		}
+	}
+	m.settingsForm.blurCurrent()
+	m.settingsForm.index = settingsFieldLanguage
+	m.settingsForm.fields[settingsFieldLanguage].SetValue(config.LanguageEnglish)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	if got := m.settingsForm.fields[settingsFieldLanguage].Value(); got != config.LanguageSimplifiedChinese {
+		t.Fatalf("language after right = %q, want zh-CN", got)
+	}
+	if got := optionLabel(settingsFieldLanguage, config.LanguageEnglish); got != "English" {
+		t.Fatalf("english language option label = %q", got)
 	}
 }
 

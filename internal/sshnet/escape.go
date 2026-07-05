@@ -34,6 +34,21 @@ func ParseEscapeLine(line string) EscapeResult {
 }
 
 func EscapeHelp() string {
+	return EscapeHelpWithLanguage("")
+}
+
+func EscapeHelpWithLanguage(language string) string {
+	if language == "zh-CN" {
+		return `VeloSSH 本地命令：
+  :vssh files       切换到文件管理器
+  :vssh tasks       打开任务中心
+  :vssh settings    打开设置
+  :vssh back        返回服务器列表
+  :vssh reconnect   重连当前 SSH 会话
+  :vssh quit        断开当前会话
+  :vssh help        显示本帮助
+  :vssh send <text> 强制发送文本到远端`
+	}
 	return `VeloSSH local commands:
   :vssh files       switch to file manager
   :vssh tasks       open task center

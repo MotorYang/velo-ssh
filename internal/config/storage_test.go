@@ -18,6 +18,9 @@ func TestStoreLoadMissingReturnsDefaults(t *testing.T) {
 	if cfg.Settings.DefaultViewMode != ViewSingle {
 		t.Fatalf("default view mode = %q", cfg.Settings.DefaultViewMode)
 	}
+	if cfg.Settings.Language != LanguageEnglish {
+		t.Fatalf("default language = %q, want en", cfg.Settings.Language)
+	}
 	if len(cfg.Servers) != 0 {
 		t.Fatalf("servers = %d, want 0", len(cfg.Servers))
 	}

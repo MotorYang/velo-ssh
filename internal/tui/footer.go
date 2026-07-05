@@ -75,50 +75,50 @@ func (m Model) helpText() string {
 	switch m.state {
 	case app.StateServerList:
 		if m.searching {
-			return "[Enter] Apply Filter | [Esc] Clear Filter"
+			return m.tr(textFooterServerSearch)
 		}
-		return "[j/k] Move | [/] Filter | [Enter] Connect | [f] Files | [S] Settings | [a/e/c/d] Add/Edit/Clone/Delete | [q] Quit"
+		return m.tr(textFooterServerList)
 	case app.StateServerForm:
-		return "[Tab/Down] Next | [Shift+Tab/Up] Previous | [Left/Right/Space] Change Option | [Enter] Next/Save | [Esc] Cancel"
+		return m.tr(textFooterServerForm)
 	case app.StateSettingsCenter:
 		return ""
 	case app.StateFileManager:
 		if m.fileSearching {
-			return "[Enter] Apply File Search | [Esc] Cancel Search"
+			return m.tr(textFooterFileSearch)
 		}
 		if m.renaming {
-			return "[Enter] Save Rename | [Esc] Cancel Rename"
+			return m.tr(textFooterRename)
 		}
 		if m.creatingDir {
-			return "[Enter] Create Directory | [Esc] Cancel"
+			return m.tr(textFooterCreateDir)
 		}
 		if m.config.Settings.DefaultViewMode == "single" {
-			return "[/] Search | [b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+			return m.tr(textFooterFileSingle)
 		}
-		return "[/] Search | [Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+		return m.tr(textFooterFileSplit)
 	case app.StateTaskCenter:
-		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [R] Refresh | [t]/[q]/[Esc] Back"
+		return m.tr(textFooterTaskCenter)
 	case app.StateConfirmModal:
 		if m.modalKind == modalHostKey {
-			return "[Enter]/[y] Trust Host Key | [Esc]/[n] Cancel"
+			return m.tr(textTrustAndRetry)
 		}
 		if m.modalKind == modalOverwrite {
-			return "[Enter]/[y] Overwrite | [Esc]/[n] Cancel"
+			return m.tr(textOverwriteAction)
 		}
 		if m.modalKind == modalFileDelete {
-			return "[Enter]/[y] Delete | [Esc]/[n] Cancel"
+			return m.tr(textDeleteAction)
 		}
 		if m.modalKind == modalTaskCancel {
-			return "[Enter]/[y] Cancel Task | [Esc]/[n] Keep Task"
+			return m.tr(textCancelTaskAction) + " | " + m.tr(textKeepTaskAction)
 		}
 		if m.modalKind == modalServerFormDiscard {
-			return "[Enter]/[y] Discard Changes | [Esc]/[n] Keep Editing"
+			return m.tr(textFooterSettingsDiscard)
 		}
-		return "[Enter]/[y] Confirm | [Esc]/[n] Cancel"
+		return m.tr(textFooterConfirm)
 	case app.StateShell:
 		return "[Enter]/[o] Open Shell | [Esc] Server List"
 	case app.StateHelp:
-		return "[Esc]/[q] Back"
+		return m.tr(textFooterBack)
 	default:
 		return ""
 	}

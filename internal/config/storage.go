@@ -187,6 +187,11 @@ func normalizeFile(f *File) {
 	if f.Settings.DefaultViewMode == "" {
 		f.Settings = DefaultSettings()
 	}
+	switch f.Settings.Language {
+	case LanguageEnglish, LanguageSimplifiedChinese:
+	default:
+		f.Settings.Language = LanguageEnglish
+	}
 	if f.Servers == nil {
 		f.Servers = []Server{}
 	}

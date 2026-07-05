@@ -175,7 +175,7 @@ func (c *Client) OpenShell(ctx context.Context, size PtySize) (*Shell, error) {
 		_ = session.Close()
 		return nil, err
 	}
-	sh := &Shell{session: session, stdin: stdin, stdout: stdout, stderr: stderr}
+	sh := &Shell{session: session, stdin: stdin, stdout: stdout, stderr: stderr, help: EscapeHelpWithLanguage(c.settings.Language)}
 	c.mu.Lock()
 	c.shell = sh
 	c.mu.Unlock()

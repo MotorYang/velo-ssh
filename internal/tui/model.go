@@ -133,10 +133,10 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 	}
 	m.tasks.SetConcurrency(cfg.Settings.TransferConcurrency)
 	m.searchInput = textinput.New()
-	m.searchInput.Placeholder = "filter by name, env, host, user, tag"
+	m.searchInput.Placeholder = m.tr(textSearchServerPlaceholder)
 	m.searchInput.CharLimit = 120
 	m.fileSearchInput = textinput.New()
-	m.fileSearchInput.Placeholder = "filter files"
+	m.fileSearchInput.Placeholder = m.tr(textSearchFilePlaceholder)
 	m.fileSearchInput.CharLimit = 120
 	m.renameInput = textinput.New()
 	m.renameInput.CharLimit = 256
@@ -280,12 +280,12 @@ func (m Model) View() string {
 	case app.StateShell:
 		body = m.viewShell()
 	case app.StateHelp:
-		body = sshnet.EscapeHelp()
+		body = sshnet.EscapeHelpWithLanguage(m.config.Settings.Language)
 	default:
 		body = m.viewServerList()
 	}
 	if m.err != "" {
-		body += "\n" + m.styles.error.Render("ERROR: "+m.err)
+		body += "\n" + m.styles.error.Render(m.tr(textErrorPrefix)+": "+m.err)
 	}
 	if m.status != "" {
 		body += "\n" + m.styles.muted.Render(m.status)
@@ -646,9 +646,9 @@ func (m Model) saveServerForm() (tea.Model, tea.Cmd) {
 	m.searchInput.SetValue("")
 	m.cursor = indexServerByID(m.config.Servers, srv.ID)
 	if m.form.mode == "edit" {
-		m.status = "Server updated."
+		m.status = m.tr(textServerUpdated)
 	} else {
-		m.status = "Server added."
+		m.status = m.tr(textServerAdded)
 	}
 	return m, nil
 }
@@ -700,7 +700,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.config = cfg
 		m.cursor = clampCursor(m.cursor, len(m.filteredServers()))
-		m.status = fmt.Sprintf("Deleted server %s.", m.deleteName)
+		m.status = fmt.Sprintf(m.tr(textServerDeleted), m.deleteName)
 		m.deleteID = ""
 		m.deleteName = ""
 		m.state = m.previous
@@ -716,7 +716,7 @@ func (m Model) handleServerFormDiscardConfirmKey(msg tea.KeyMsg) (tea.Model, tea
 	case keyEnter, "y", "Y":
 		m.modalKind = ""
 		m.state = m.previous
-		m.status = "Server form changes discarded."
+		m.status = m.tr(textServerDiscarded)
 	}
 	return m, nil
 }
@@ -724,7 +724,7 @@ func (m Model) handleServerFormDiscardConfirmKey(msg tea.KeyMsg) (tea.Model, tea
 func (m Model) handleOverwriteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEsc, "n", "N":
-		m.status = "Transfer canceled before overwriting existing target."
+		m.status = m.tr(textTransferOverwriteCancel)
 		m.clearOverwritePrompt()
 		m.state = m.previous
 	case keyEnter, "y", "Y":
@@ -750,7 +750,7 @@ func (m *Model) clearOverwritePrompt() {
 func (m Model) handleFileDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEsc, "n", "N":
-		m.status = "Delete canceled."
+		m.status = m.tr(textDeleteCanceled)
 		m.clearFileDeletePrompt()
 		m.state = m.previous
 	case keyEnter, "y", "Y":
@@ -883,7 +883,7 @@ func (m Model) saveSettingsForm() (tea.Model, tea.Cmd) {
 	m.tasks.SetConcurrency(settings.TransferConcurrency)
 	m.ascii = term.ShouldUseASCII(m.config.Settings.ASCIIFallback)
 	m.styles = newStyles(m.ascii)
-	m.status = "Settings saved."
+	m.status = m.tr(textSettingsSaved)
 	m.state = m.previous
 	return m, nil
 }

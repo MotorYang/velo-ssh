@@ -25,7 +25,7 @@ func (m Model) viewModal(message string) string {
 	innerWidth := modalPanelWidth - 2
 	lines := []string{
 		"+" + strings.Repeat("-", innerWidth) + "+",
-		"|" + centerVisual(m.styles.title.Render("Confirm"), innerWidth) + "|",
+		"|" + centerVisual(m.styles.title.Render(m.tr(textConfirmTitle)), innerWidth) + "|",
 		"|" + strings.Repeat(" ", innerWidth) + "|",
 	}
 	for _, line := range strings.Split(message, "\n") {
@@ -41,21 +41,21 @@ func (m Model) viewModal(message string) string {
 }
 
 func (m Model) viewDeleteConfirm() string {
-	return m.viewModal("Delete server " + m.deleteName + " (" + m.deleteID + ")?\n\nThis removes it from ~/.config/vssh/config.json.")
+	return m.viewModal(m.tr(textDeleteServerPrompt) + " " + m.deleteName + " (" + m.deleteID + ")?\n\n" + m.tr(textDeleteServerBody))
 }
 
 func (m Model) viewHostKeyConfirm() string {
 	if m.hostKeyErr == nil {
-		return m.viewModal("Missing host key confirmation context.")
+		return m.viewModal(m.tr(textMissingHostKeyContext))
 	}
 	srv := m.pendingHostKeyServer
 	return m.viewModal(
-		"Trust SSH host key for " + srv.Name + " (" + srv.Host + ")?\n\n" +
-			"Target: " + m.hostKeyErr.Host + "\n" +
+		m.tr(textTrustHostKeyPrompt) + " " + srv.Name + " (" + srv.Host + ")?\n\n" +
+			m.tr(textTarget) + ": " + m.hostKeyErr.Host + "\n" +
 			"Fingerprint: " + m.hostKeyErr.Fingerprint + "\n" +
-			"Known hosts: " + m.hostKeyErr.KnownHostsPath + "\n\n" +
-			"Accept only if this fingerprint matches the server you expect.\n\n" +
-			"[Enter]/[y] Trust and retry | [Esc]/[n] Cancel",
+			m.tr(textKnownHosts) + ": " + m.hostKeyErr.KnownHostsPath + "\n\n" +
+			m.tr(textHostKeyWarning) + "\n\n" +
+			m.tr(textTrustAndRetry),
 	)
 }
 
@@ -64,15 +64,15 @@ func (m Model) viewOverwriteConfirm() string {
 	if len(targets) > 6 {
 		targets = targets[:6]
 	}
-	message := "Overwrite existing target file(s)?\n\n"
+	message := m.tr(textOverwritePrompt) + "\n\n"
 	for _, target := range targets {
 		message += "- " + target + "\n"
 	}
 	if len(m.pendingOverwrite) > len(targets) {
 		message += "- ...\n"
 	}
-	message += "\nExisting targets are only replaced after the atomic transfer succeeds.\n\n"
-	message += "[Enter]/[y] Overwrite | [Esc]/[n] Cancel"
+	message += "\n" + m.tr(textOverwriteBody) + "\n\n"
+	message += m.tr(textOverwriteAction)
 	return m.viewModal(message)
 }
 
@@ -81,38 +81,34 @@ func (m Model) viewFileDeleteConfirm() string {
 	if len(items) > 6 {
 		items = items[:6]
 	}
-	scope := "local"
-	if m.pendingDeleteRemote {
-		scope = "remote"
-	}
-	message := "Delete selected " + scope + " path(s)?\n\n"
+	message := m.tr(textDeletePathsPrompt) + "\n\n"
 	for _, item := range items {
 		message += "- " + item.Path + "\n"
 	}
 	if len(m.pendingFileDelete) > len(items) {
 		message += "- ...\n"
 	}
-	message += "\nThis operation cannot be undone by VeloSSH.\n\n"
-	message += "[Enter]/[y] Delete | [Esc]/[n] Cancel"
+	message += "\n" + m.tr(textDeletePathsBody) + "\n\n"
+	message += m.tr(textDeleteAction)
 	return m.viewModal(message)
 }
 
 func (m Model) viewTaskCancelConfirm() string {
-	message := "Cancel and remove transfer task?\n\n"
-	message += "Task: " + m.pendingTaskCancelID + "\n"
+	message := m.tr(textCancelTaskPrompt) + "\n\n"
+	message += m.tr(textTask) + ": " + m.pendingTaskCancelID + "\n"
 	if m.pendingTaskCancelName != "" {
-		message += "Path: " + m.pendingTaskCancelName + "\n"
+		message += m.tr(textPath) + ": " + m.pendingTaskCancelName + "\n"
 	}
-	message += "\nThe running transfer is canceled, temporary files are removed when possible, and the task record is removed from the list.\n\n"
-	message += "[Enter]/[y] Cancel Task | [Esc]/[n] Keep Task"
+	message += "\n" + m.tr(textCancelTaskBody) + "\n\n"
+	message += m.tr(textCancelTaskAction) + " | " + m.tr(textKeepTaskAction)
 	return m.viewModal(message)
 }
 
 func (m Model) viewServerFormDiscardConfirm() string {
 	return m.viewModal(
-		"Discard unsaved server changes?\n\n" +
-			"You have edited fields in this server form. Leaving now will lose those changes.\n\n" +
-			"[Enter]/[y] Discard Changes | [Esc]/[n] Keep Editing",
+		m.tr(textDiscardServerPrompt) + "\n\n" +
+			m.tr(textDiscardServerBody) + "\n\n" +
+			m.tr(textDiscardAction) + " | " + m.tr(textKeepEditingAction),
 	)
 }
 

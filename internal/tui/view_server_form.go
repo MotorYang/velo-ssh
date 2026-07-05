@@ -7,13 +7,16 @@ import (
 
 func (m Model) viewServerForm() string {
 	var b strings.Builder
-	title := "Add Server"
+	title := m.tr(textAddServerTitle)
 	if m.form.mode == "edit" {
-		title = "Edit Server"
+		title = m.tr(textEditServerTitle)
+	}
+	if m.form.mode == "clone" {
+		title = m.tr(textCloneServerTitle)
 	}
 	fmt.Fprintln(&b, m.styles.title.Render(title))
 	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, "ID is generated automatically. Auth Type: use Left/Right/Space to change.")
+	fmt.Fprintln(&b, m.tr(textServerFormGuide))
 	fmt.Fprintln(&b)
 	for _, i := range m.form.visibleFields() {
 		field := m.form.fields[i]
@@ -25,7 +28,7 @@ func (m Model) viewServerForm() string {
 		if i == serverFieldAuthType {
 			value = authTypeSelector(m.form.authType())
 		}
-		fmt.Fprintf(&b, "%s%-28s %s\n", prefix, serverFormLabels[i]+":", value)
+		fmt.Fprintf(&b, "%s%s %s\n", prefix, padVisual(serverFormLabel(i, m.config.Settings.Language)+":", 28), value)
 	}
 	return b.String()
 }

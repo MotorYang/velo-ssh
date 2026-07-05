@@ -19,6 +19,9 @@ const (
 	HostKeyStrict   = "strict"
 	HostKeyAsk      = "ask"
 	HostKeyInsecure = "insecure"
+
+	LanguageEnglish           = "en"
+	LanguageSimplifiedChinese = "zh-CN"
 )
 
 type File struct {
@@ -35,6 +38,7 @@ type Settings struct {
 	TransferConcurrency int    `json:"transferConcurrency"`
 	KeepAliveSeconds    int    `json:"keepAliveSeconds"`
 	Theme               string `json:"theme"`
+	Language            string `json:"language"`
 	ConfirmOverwrite    bool   `json:"confirmOverwrite"`
 	KnownHostsPolicy    string `json:"knownHostsPolicy"`
 }
@@ -66,6 +70,7 @@ func DefaultSettings() Settings {
 		TransferConcurrency: 4,
 		KeepAliveSeconds:    20,
 		Theme:               "default",
+		Language:            LanguageEnglish,
 		ConfirmOverwrite:    true,
 		KnownHostsPolicy:    HostKeyAsk,
 	}
