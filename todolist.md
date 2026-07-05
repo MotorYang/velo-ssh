@@ -109,6 +109,11 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Add delete local directory.
 - [x] Add delete remote directory.
 - [x] Add confirmation modal for destructive file operations.
+- [x] Add same-pane local copy/paste.
+- [x] Add same-pane local move.
+- [x] Add same-pane remote copy/paste.
+- [x] Add same-pane remote move.
+- [x] Reject cross-pane paste with upload/download guidance.
 - [x] Add clear error when folder upload is attempted in MVP.
 - [x] Add clear error when folder download is attempted in MVP.
 - [x] Keep existing target files intact on failed upload.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -165,6 +166,65 @@ func (m Model) deleteFilesCmd(items []fileItem, remote bool) tea.Cmd {
 			}
 		}
 		remoteFiles, err := listRemoteFiles(client, m.remoteDir)
+		return filePanesLoadedMsg{local: m.localFiles, remote: remoteFiles, err: err}
+	}
+}
+
+func (m Model) pasteClipboardCmd(move bool) tea.Cmd {
+	items := append([]fileItem(nil), m.clipboardFiles...)
+	sourceRemote := m.clipboardRemote
+	targetRemote := m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1
+	targetLocalDir := m.localDir
+	targetRemoteDir := m.remoteDir
+	return func() tea.Msg {
+		if len(items) == 0 {
+			return filePanesLoadedMsg{err: fmt.Errorf("paste failed: clipboard is empty")}
+		}
+		if sourceRemote != targetRemote {
+			return filePanesLoadedMsg{err: fmt.Errorf("paste failed: cross-pane copy is not supported; use upload/download instead")}
+		}
+		action := "copy"
+		if move {
+			action = "move"
+		}
+		if !targetRemote {
+			for _, item := range items {
+				target := filepath.Join(targetLocalDir, item.Name)
+				if move {
+					if err := os.Rename(item.Path, target); err != nil {
+						return filePanesLoadedMsg{err: actionError("move local path", item.Path+" -> "+target, err)}
+					}
+					continue
+				}
+				if err := copyLocalPath(item.Path, target); err != nil {
+					return filePanesLoadedMsg{err: actionError("copy local path", item.Path+" -> "+target, err)}
+				}
+			}
+			local, err := listLocalFiles(targetLocalDir)
+			return filePanesLoadedMsg{local: local, remote: m.remoteFiles, err: err}
+		}
+		if m.ssh == nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("%s remote path failed: ssh client is not connected", action)}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		client, err := m.ssh.OpenSFTP(ctx)
+		if err != nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("%s remote path failed: open sftp: %w", action, err)}
+		}
+		for _, item := range items {
+			target := path.Join(targetRemoteDir, item.Name)
+			if move {
+				if err := client.Rename(item.Path, target); err != nil {
+					return filePanesLoadedMsg{err: actionError("move remote path", item.Path+" -> "+target, err)}
+				}
+				continue
+			}
+			if err := copyRemotePath(client, item.Path, target); err != nil {
+				return filePanesLoadedMsg{err: actionError("copy remote path", item.Path+" -> "+target, err)}
+			}
+		}
+		remoteFiles, err := listRemoteFiles(client, targetRemoteDir)
 		return filePanesLoadedMsg{local: m.localFiles, remote: remoteFiles, err: err}
 	}
 }
@@ -378,6 +438,100 @@ func removeRemoteRecursive(client *sftp.Client, remotePath string) error {
 		}
 	}
 	return client.RemoveDirectory(remotePath)
+}
+
+func copyLocalPath(source, target string) error {
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		if err := os.Mkdir(target, info.Mode()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(source)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := copyLocalPath(filepath.Join(source, entry.Name()), filepath.Join(target, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode())
+	if err != nil {
+		return err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(target)
+		}
+	}()
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	cleanup = false
+	return os.Chtimes(target, time.Now(), info.ModTime())
+}
+
+func copyRemotePath(client *sftp.Client, source, target string) error {
+	info, err := client.Stat(source)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		if err := client.Mkdir(target); err != nil {
+			return err
+		}
+		_ = client.Chmod(target, info.Mode())
+		entries, err := client.ReadDir(source)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := copyRemotePath(client, path.Join(source, entry.Name()), path.Join(target, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	in, err := client.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := client.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY)
+	if err != nil {
+		return err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = client.Remove(target)
+		}
+	}()
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	cleanup = false
+	_ = client.Chmod(target, info.Mode())
+	return nil
 }
 
 func newTaskID(prefix string) string {

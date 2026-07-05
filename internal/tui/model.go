@@ -76,6 +76,8 @@ type Model struct {
 	pendingOverwrite     []string
 	pendingFileDelete    []fileItem
 	pendingDeleteRemote  bool
+	clipboardFiles       []fileItem
+	clipboardRemote      bool
 }
 
 type serverForm struct {
@@ -866,6 +868,19 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingFileDelete = items
 		m.pendingDeleteRemote = m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1
 		m.state = app.StateConfirmModal
+	case "y":
+		items := selectedFileItems(files, cursor)
+		if len(items) == 0 {
+			m.err = "no file selected for copy"
+			return m, nil
+		}
+		m.clipboardFiles = append([]fileItem(nil), items...)
+		m.clipboardRemote = m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1
+		m.status = fmt.Sprintf("Copied %d item(s).", len(items))
+	case "v":
+		return m, m.pasteClipboardCmd(false)
+	case "M":
+		return m, m.pasteClipboardCmd(true)
 	case "u":
 		return m, m.startUploadCmd(false, nil)
 	case "d":

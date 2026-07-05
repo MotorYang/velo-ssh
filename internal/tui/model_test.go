@@ -711,6 +711,118 @@ func TestFileManagerDeleteLocalDirectoryWithConfirm(t *testing.T) {
 	}
 }
 
+func TestFileManagerCopyPasteLocalDirectory(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source")
+	if err := os.Mkdir(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "file.txt"), []byte("content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target")
+	if err := os.Mkdir(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localDir = dir
+	local, err := listLocalFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.localFiles = local
+	for i, item := range m.localFiles {
+		if item.Name == "source" {
+			m.localCursor = i
+			break
+		}
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+	m.localDir = targetDir
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected paste command")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if got, err := os.ReadFile(filepath.Join(targetDir, "source", "file.txt")); err != nil || string(got) != "content" {
+		t.Fatalf("copied file content=%q err=%v", got, err)
+	}
+}
+
+func TestFileManagerMoveLocalFile(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "move.txt")
+	if err := os.WriteFile(source, []byte("content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target")
+	if err := os.Mkdir(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localDir = dir
+	local, err := listLocalFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.localFiles = local
+	for i, item := range m.localFiles {
+		if item.Name == "move.txt" {
+			m.localCursor = i
+			break
+		}
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(Model)
+	m.localDir = targetDir
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'M'}})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected move command")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if _, err := os.Stat(source); !os.IsNotExist(err) {
+		t.Fatalf("source still exists or unexpected stat error: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(targetDir, "move.txt")); err != nil || string(got) != "content" {
+		t.Fatalf("moved file content=%q err=%v", got, err)
+	}
+}
+
+func TestFileManagerRejectsCrossPanePaste(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.clipboardFiles = []fileItem{{Name: "local.txt", Path: "/tmp/local.txt"}}
+	m.clipboardRemote = false
+	m.activePane = 1
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected paste command")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if !strings.Contains(m.err, "cross-pane copy") {
+		t.Fatalf("err = %q, want cross-pane rejection", m.err)
+	}
+}
+
 func TestSettingsSave(t *testing.T) {
 	store := config.NewStore(t.TempDir())
 	m := NewModel(app.StateSettingsCenter, store, config.DefaultFile())

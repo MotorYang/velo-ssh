@@ -72,9 +72,9 @@ func (m Model) helpText() string {
 			return "[Enter] Create Directory | [Esc] Cancel"
 		}
 		if m.config.Settings.DefaultViewMode == "single" {
-			return "[b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+			return "[b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
 		}
-		return "[Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+		return "[Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
 	case app.StateTaskCenter:
 		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [R] Refresh | [t]/[q]/[Esc] Back"
 	case app.StateConfirmModal:
