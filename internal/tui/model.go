@@ -935,7 +935,7 @@ func taskCenterTickCmd() tea.Cmd {
 }
 
 func (m Model) runShellCmd() tea.Cmd {
-	return tea.Exec(&shellExecCommand{client: m.ssh}, func(err error) tea.Msg {
+	return tea.Exec(&shellExecCommand{client: m.ssh, title: m.shellFrameTitle(), width: m.width}, func(err error) tea.Msg {
 		if finished, ok := err.(shellExitError); ok {
 			return shellFinishedMsg{action: finished.action}
 		}
@@ -960,6 +960,8 @@ func (m Model) reconnectCmd() tea.Cmd {
 
 type shellExecCommand struct {
 	client *sshnet.Client
+	title  string
+	width  int
 	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
@@ -985,6 +987,7 @@ func (c *shellExecCommand) Run() error {
 	if !ok {
 		errOut = os.Stderr
 	}
+	c.writeShellHeader(out)
 	var action sshnet.EscapeResult
 	err := c.client.RunInteractiveShell(context.Background(), in, out, errOut, func(res sshnet.EscapeResult) {
 		if res.Command != "help" && res.Command != "send" && !res.Unknown {
@@ -995,6 +998,17 @@ func (c *shellExecCommand) Run() error {
 		return shellExitError{action: action}
 	}
 	return err
+}
+
+func (c *shellExecCommand) writeShellHeader(out *os.File) {
+	width := c.width
+	if width <= 0 {
+		width = 88
+	}
+	if width < 60 {
+		width = 60
+	}
+	_, _ = fmt.Fprintln(out, shellTopBorder(width, c.title))
 }
 
 type shellExitError struct {

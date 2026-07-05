@@ -204,6 +204,23 @@ func TestChangedHostKeyDoesNotOpenConfirmModal(t *testing.T) {
 	}
 }
 
+func TestShellViewUsesBorderedFrameWithServerName(t *testing.T) {
+	m := NewModel(app.StateShell, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.width = 90
+	m.activeServer = config.Server{Name: "云南服务器", ID: "yn"}
+	got := m.viewShell()
+	if !strings.Contains(got, "+---") || !strings.Contains(got, "SSH 云南服务器") || !strings.Contains(got, "|Remote shell is connected.") {
+		t.Fatalf("shell view should render bordered server frame: %q", got)
+	}
+}
+
+func TestShellTopBorderContainsTitle(t *testing.T) {
+	got := shellTopBorder(40, "SSH prod")
+	if !strings.HasPrefix(got, "+") || !strings.HasSuffix(got, "+") || !strings.Contains(got, "SSH prod") {
+		t.Fatalf("top border = %q", got)
+	}
+}
+
 func TestConfirmModalIsBorderedAndCentered(t *testing.T) {
 	m := NewModel(app.StateConfirmModal, config.NewStore(t.TempDir()), config.DefaultFile())
 	m.width = 120
