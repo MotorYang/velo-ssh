@@ -75,7 +75,7 @@ func (m Model) renameCurrentCmd(newName string) tea.Cmd {
 		if m.activePane == 0 {
 			target := filepath.Join(filepath.Dir(item.Path), newName)
 			if err := os.Rename(item.Path, target); err != nil {
-				return errMsg{err}
+				return errMsg{actionError("rename local path", item.Path+" -> "+target, err)}
 			}
 			local, err := listLocalFiles(m.localDir)
 			return filePanesLoadedMsg{local: local, remote: m.remoteFiles, err: err}
@@ -91,7 +91,7 @@ func (m Model) renameCurrentCmd(newName string) tea.Cmd {
 		}
 		target := path.Join(path.Dir(item.Path), newName)
 		if err := client.Rename(item.Path, target); err != nil {
-			return errMsg{err}
+			return errMsg{actionError("rename remote path", item.Path+" -> "+target, err)}
 		}
 		remote, err := listRemoteFiles(client, m.remoteDir)
 		return filePanesLoadedMsg{local: m.localFiles, remote: remote, err: err}
@@ -107,7 +107,7 @@ func (m Model) mkdirCurrentCmd(name string) tea.Cmd {
 		if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 {
 			target := filepath.Join(m.localDir, name)
 			if err := os.Mkdir(target, 0o755); err != nil {
-				return filePanesLoadedMsg{err: fmt.Errorf("create local directory %s: %w", target, err)}
+				return filePanesLoadedMsg{err: actionError("create local directory", target, err)}
 			}
 			local, err := listLocalFiles(m.localDir)
 			return filePanesLoadedMsg{local: local, remote: m.remoteFiles, err: err}
@@ -123,7 +123,7 @@ func (m Model) mkdirCurrentCmd(name string) tea.Cmd {
 		}
 		target := path.Join(m.remoteDir, name)
 		if err := client.Mkdir(target); err != nil {
-			return filePanesLoadedMsg{err: fmt.Errorf("create remote directory %s: %w", target, err)}
+			return filePanesLoadedMsg{err: actionError("create remote directory", target, err)}
 		}
 		remote, err := listRemoteFiles(client, m.remoteDir)
 		return filePanesLoadedMsg{local: m.localFiles, remote: remote, err: err}
@@ -141,7 +141,7 @@ func (m Model) deleteFilesCmd(items []fileItem, remote bool) tea.Cmd {
 					continue
 				}
 				if err := os.RemoveAll(item.Path); err != nil {
-					return filePanesLoadedMsg{err: fmt.Errorf("delete local path %s: %w", item.Path, err)}
+					return filePanesLoadedMsg{err: actionError("delete local path", item.Path, err)}
 				}
 			}
 			local, err := listLocalFiles(m.localDir)
@@ -161,7 +161,7 @@ func (m Model) deleteFilesCmd(items []fileItem, remote bool) tea.Cmd {
 				continue
 			}
 			if err := removeRemoteRecursive(client, item.Path); err != nil {
-				return filePanesLoadedMsg{err: fmt.Errorf("delete remote path %s: %w", item.Path, err)}
+				return filePanesLoadedMsg{err: actionError("delete remote path", item.Path, err)}
 			}
 		}
 		remoteFiles, err := listRemoteFiles(client, m.remoteDir)
@@ -196,7 +196,7 @@ func (m Model) startUploadCmd(force bool, items []fileItem) tea.Cmd {
 				if _, err := client.Stat(target); err == nil {
 					existing = append(existing, target)
 				} else if !os.IsNotExist(err) {
-					return transferStartedMsg{err: fmt.Errorf("check remote target %s: %w", target, err)}
+					return transferStartedMsg{err: actionError("check remote upload target", target, err)}
 				}
 			}
 			if len(existing) > 0 {
@@ -241,7 +241,7 @@ func (m Model) startDownloadCmd(force bool, items []fileItem) tea.Cmd {
 				if _, err := os.Stat(target); err == nil {
 					existing = append(existing, target)
 				} else if !os.IsNotExist(err) {
-					return transferStartedMsg{err: fmt.Errorf("check local target %s: %w", target, err)}
+					return transferStartedMsg{err: actionError("check local download target", target, err)}
 				}
 			}
 			if len(existing) > 0 {

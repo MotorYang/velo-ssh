@@ -113,10 +113,10 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Add clear error when folder download is attempted in MVP.
 - [x] Keep existing target files intact on failed upload.
 - [x] Keep existing target files intact on failed download.
-- [ ] Handle permission denied errors with action/path/recovery wording.
-- [ ] Handle disk full errors with action/path/recovery wording.
-- [ ] Handle file exists errors with action/path/recovery wording.
-- [ ] Handle missing path errors with action/path/recovery wording.
+- [x] Handle permission denied errors with action/path/recovery wording.
+- [x] Handle disk full errors with action/path/recovery wording.
+- [x] Handle file exists errors with action/path/recovery wording.
+- [x] Handle missing path errors with action/path/recovery wording.
 
 ## SSH Shell
 
@@ -132,11 +132,11 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 
 ## Error Experience
 
-- [ ] Define shared error formatting helper.
-- [ ] Include failed action in user-facing errors.
-- [ ] Include target server/path in user-facing errors.
-- [ ] Include underlying reason in user-facing errors.
-- [ ] Include recovery action when practical.
+- [x] Define shared error formatting helper.
+- [x] Include failed action in user-facing errors.
+- [x] Include target server/path in user-facing errors.
+- [x] Include underlying reason in user-facing errors.
+- [x] Include recovery action when practical.
 - [ ] Improve authentication failure error text.
 - [ ] Improve host key mismatch error text.
 - [ ] Improve connection timeout error text.
