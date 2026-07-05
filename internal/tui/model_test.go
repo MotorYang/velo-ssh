@@ -89,6 +89,17 @@ func TestServerFilter(t *testing.T) {
 	}
 }
 
+func TestServerListUsesBorderedPanel(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Servers = []config.Server{{ID: "dev", Name: "Dev", Env: "dev", Host: "127.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent}}
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
+	m.width = 90
+	got := m.viewServerList()
+	if !strings.HasPrefix(got, "+") || !strings.Contains(got, "VeloSSH Manager") || !strings.Contains(got, "|") {
+		t.Fatalf("server list should render bordered panel: %q", got)
+	}
+}
+
 func TestPasswordServerStoresSecretRef(t *testing.T) {
 	store := config.NewStore(t.TempDir())
 	m := NewModel(app.StateServerList, store, config.DefaultFile())
@@ -436,6 +447,9 @@ func TestFileManagerViewDoesNotRenderAllRows(t *testing.T) {
 	if !strings.Contains(got, "LOCAL rows 46-55/100") || !strings.Contains(got, "REMOTE rows 1-10/100") {
 		t.Fatalf("missing viewport marker: %q", got)
 	}
+	if !strings.Contains(got, "Sel") || !strings.Contains(got, "Mode") || !strings.Contains(got, "Name") {
+		t.Fatalf("missing file table header: %q", got)
+	}
 }
 
 func TestFileManagerPaneScrollsIndependently(t *testing.T) {
@@ -515,6 +529,29 @@ func TestFooterIsLastLine(t *testing.T) {
 	}
 	if lines[len(lines)-3] != strings.Repeat("-", 100) {
 		t.Fatalf("footer border = %q", lines[len(lines)-3])
+	}
+}
+
+func TestFooterSplitsLongHelpIntoMultipleLines(t *testing.T) {
+	long := "[a] Alpha | [b] Beta | [c] Gamma | [d] Delta | [e] Epsilon | [f] Phi | [g] Gamma | [h] Eta | [i] Iota | [j] Jota | [k] Kappa"
+	lines := splitHelpLines(long)
+	if len(lines) < 2 {
+		t.Fatalf("expected long help to split, got %v", lines)
+	}
+	for _, line := range lines {
+		if visibleWidth(line) > 110 {
+			t.Fatalf("footer line too wide: %d %q", visibleWidth(line), line)
+		}
+	}
+}
+
+func TestTaskCenterUsesBorderedPanel(t *testing.T) {
+	m := NewModel(app.StateTaskCenter, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.width = 100
+	m.tasks.Add(transfer.NewTask("task-a", transfer.Upload, "/local/a", "/remote/a"))
+	got := m.viewTaskCenter()
+	if !strings.HasPrefix(got, "+") || !strings.Contains(got, "Task Center") || !strings.Contains(got, "upload") {
+		t.Fatalf("task center should render bordered panel: %q", got)
 	}
 }
 

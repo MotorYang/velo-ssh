@@ -3,17 +3,18 @@ package tui
 import (
 	"fmt"
 	"sort"
-	"strings"
 
+	"github.com/motoryang/velo-ssh/internal/term"
 	"github.com/motoryang/velo-ssh/internal/transfer"
 )
 
 func (m Model) viewTaskCenter() string {
-	var b strings.Builder
-	fmt.Fprintln(&b, m.styles.title.Render("Task Center"))
+	width := m.contentWidth()
+	inner := width - 2
+	body := []string{}
 	tasks := m.taskSnapshots()
 	if len(tasks) == 0 {
-		fmt.Fprintln(&b, "No transfer tasks.")
+		body = append(body, "No transfer tasks.")
 	}
 	cursor := clampCursor(m.taskCursor, len(tasks))
 	for i, task := range tasks {
@@ -38,12 +39,13 @@ func (m Model) viewTaskCenter() string {
 		if task.Error != "" {
 			line += " " + task.Error
 		}
+		line = term.Truncate(line, inner)
 		if i == cursor {
 			line = m.styles.selected.Render(line)
 		}
-		fmt.Fprintln(&b, line)
+		body = append(body, line)
 	}
-	return b.String()
+	return borderedBlock("Task Center", width, body)
 }
 
 func (m Model) taskSnapshots() []*transfer.Task {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/motoryang/velo-ssh/internal/app"
+	"github.com/motoryang/velo-ssh/internal/term"
 )
 
 func (m Model) withFooter(body, help string) string {
@@ -38,7 +39,7 @@ func (m Model) footerBlock(help string) string {
 	if len(lines) == 1 {
 		return fmt.Sprintf("%s\n%s", border, lines[0])
 	}
-	return fmt.Sprintf("%s\n%s\n%s", border, lines[0], lines[1])
+	return border + "\n" + strings.Join(lines, "\n")
 }
 
 func splitHelpLines(help string) []string {
@@ -46,11 +47,28 @@ func splitHelpLines(help string) []string {
 	if len(parts) <= 1 {
 		return []string{help}
 	}
-	mid := (len(parts) + 1) / 2
-	return []string{
-		strings.Join(parts[:mid], " | "),
-		strings.Join(parts[mid:], " | "),
+	lines := make([]string, 0, 3)
+	current := ""
+	maxWidth := 96
+	for _, part := range parts {
+		candidate := part
+		if current != "" {
+			candidate = current + " | " + part
+		}
+		if term.Width(candidate) > maxWidth && current != "" {
+			lines = append(lines, current)
+			current = part
+			continue
+		}
+		current = candidate
 	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	if len(lines) == 0 {
+		return []string{help}
+	}
+	return lines
 }
 
 func (m Model) helpText() string {

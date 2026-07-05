@@ -14,7 +14,6 @@ const minFilePaneWidth = 54
 
 func (m Model) viewFileManager() string {
 	var b strings.Builder
-	fmt.Fprintln(&b, m.styles.title.Render("File Manager"))
 	leftMarker := " "
 	rightMarker := " "
 	if m.activePane == 0 {
@@ -24,12 +23,13 @@ func (m Model) viewFileManager() string {
 	}
 	split := m.config.Settings.DefaultViewMode == config.ViewSplit
 	paneWidth := m.filePaneWidth(split)
+	fmt.Fprintln(&b, topBorder(m.fileManagerWidth(split), "File Manager"))
 	if !split {
 		marker := ">"
 		if m.activePane != 1 {
 			marker = " "
 		}
-		fmt.Fprintf(&b, "%s REMOTE: %s\n", marker, m.remoteDir)
+		fmt.Fprintf(&b, "%s REMOTE: %s\n", marker, term.Truncate(m.remoteDir, paneWidth-10))
 		if m.ssh == nil {
 			fmt.Fprintln(&b, "  Remote pane requires an active SSH/SFTP connection.")
 		}
@@ -37,6 +37,7 @@ func (m Model) viewFileManager() string {
 		start, end := visibleFileRange(len(m.remoteFiles), m.remoteCursor, m.fileViewportRows())
 		fmt.Fprintf(&b, "REMOTE rows %d-%d/%d\n", displayStart(start, end), end, len(m.remoteFiles))
 		fmt.Fprintln(&b, strings.Repeat("-", paneWidth))
+		fmt.Fprintln(&b, m.renderFileHeader(paneWidth))
 		for i := start; i < end; i++ {
 			item := m.remoteFiles[i]
 			fmt.Fprintln(&b, padVisual(m.renderFileRow(i, item, m.activePane == 1, m.remoteCursor, paneWidth), paneWidth))
@@ -49,8 +50,8 @@ func (m Model) viewFileManager() string {
 		}
 		return b.String()
 	}
-	fmt.Fprintf(&b, "%s LOCAL: %s\n", leftMarker, m.localDir)
-	fmt.Fprintf(&b, "%s REMOTE: %s\n", rightMarker, m.remoteDir)
+	fmt.Fprintf(&b, "%s LOCAL:  %s\n", leftMarker, term.Truncate(m.localDir, paneWidth*2-12))
+	fmt.Fprintf(&b, "%s REMOTE: %s\n", rightMarker, term.Truncate(m.remoteDir, paneWidth*2-12))
 	if m.ssh == nil {
 		fmt.Fprintln(&b, "  Remote pane requires an active SSH/SFTP connection.")
 	}
@@ -63,6 +64,7 @@ func (m Model) viewFileManager() string {
 		padVisual(fmt.Sprintf("REMOTE rows %d-%d/%d", displayStart(remoteStart, remoteEnd), remoteEnd, len(m.remoteFiles)), paneWidth),
 	)
 	fmt.Fprintf(&b, "%s\n", strings.Repeat("-", paneWidth*2+3))
+	fmt.Fprintf(&b, "%s | %s\n", padVisual(m.renderFileHeader(paneWidth), paneWidth), padVisual(m.renderFileHeader(paneWidth), paneWidth))
 	for row := 0; row < rows; row++ {
 		left := ""
 		right := ""
@@ -84,6 +86,28 @@ func (m Model) viewFileManager() string {
 		fmt.Fprintf(&b, "New directory: %s\n", m.mkdirInput.View())
 	}
 	return b.String()
+}
+
+func (m Model) fileManagerWidth(split bool) int {
+	if split {
+		return m.filePaneWidth(true)*2 + 3
+	}
+	return m.filePaneWidth(false)
+}
+
+func (m Model) renderFileHeader(paneWidth int) string {
+	nameWidth := paneWidth - 26
+	if m.showFileTime {
+		nameWidth -= 17
+	}
+	if nameWidth < 8 {
+		nameWidth = 8
+	}
+	line := fmt.Sprintf("  %-3s %-10s %s %8s", "Sel", "Mode", padRightVisual("Name", nameWidth), "Size")
+	if m.showFileTime {
+		line = fmt.Sprintf("%s %16s", line, "Modified")
+	}
+	return m.styles.muted.Render(line)
 }
 
 func (m Model) renderFileRow(index int, item fileItem, focused bool, cursor int, paneWidth int) string {

@@ -2,21 +2,25 @@ package tui
 
 import (
 	"fmt"
-	"strings"
+
+	"github.com/motoryang/velo-ssh/internal/term"
 )
 
 func (m Model) viewServerList() string {
-	var b strings.Builder
-	fmt.Fprintln(&b, m.styles.title.Render("VeloSSH Manager"))
+	width := m.contentWidth()
+	inner := width - 2
+	body := []string{}
 	if m.searching {
-		fmt.Fprintf(&b, "Search: %s\n", m.searchInput.View())
+		body = append(body, "Search: "+m.searchInput.View())
 	} else if m.filter != "" {
-		fmt.Fprintf(&b, "Filter: %s\n", m.filter)
+		body = append(body, "Filter: "+m.filter)
+	} else {
+		body = append(body, "Filter: -")
 	}
-	fmt.Fprintln(&b)
+	body = append(body, blankLine(inner))
 	servers := m.filteredServers()
 	if len(servers) == 0 {
-		fmt.Fprintln(&b, "No servers configured or matched.")
+		body = append(body, "No servers configured or matched.")
 	} else {
 		for i, srv := range servers {
 			prefix := "  "
@@ -24,15 +28,15 @@ func (m Model) viewServerList() string {
 				prefix = "> "
 			}
 			line := fmt.Sprintf("%s[%s] %s %s@%s:%d", prefix, srv.Env, srv.Name, srv.User, srv.Host, srv.Port)
+			line = term.Truncate(line, inner)
 			if i == m.cursor {
 				line = m.styles.selected.Render(line)
 			}
-			fmt.Fprintln(&b, line)
+			body = append(body, line)
 			if srv.Desc != "" {
-				fmt.Fprintf(&b, "    %s\n", srv.Desc)
+				body = append(body, term.Truncate("    "+srv.Desc, inner))
 			}
 		}
 	}
-	fmt.Fprintln(&b)
-	return b.String()
+	return borderedBlock("VeloSSH Manager", width, body)
 }
