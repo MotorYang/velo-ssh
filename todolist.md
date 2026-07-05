@@ -167,15 +167,15 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 
 ## Integration Tests
 
-- [ ] Add local SSH/SFTP test server fixture.
-- [ ] Test password auth against local SSH/SFTP server.
-- [ ] Test key auth against local SSH/SFTP server.
-- [ ] Test known_hosts mismatch rejection.
-- [ ] Test upload temp file becomes final file only after success.
-- [ ] Test failed upload does not truncate existing remote target.
-- [ ] Test failed download does not create corrupt final local file.
-- [ ] Test KeepAlive stops after client close.
-- [ ] Test resize triggers PTY `WindowChange`.
+- [x] Add local SSH/SFTP test server fixture.
+- [x] Test password auth against local SSH/SFTP server.
+- [x] Test key auth against local SSH/SFTP server.
+- [x] Test known_hosts mismatch rejection.
+- [x] Test upload temp file becomes final file only after success.
+- [x] Test failed upload does not truncate existing remote target.
+- [x] Test failed download does not create corrupt final local file.
+- [x] Test KeepAlive stops after client close.
+- [x] Test resize triggers PTY `WindowChange`.
 
 ## v1.1 Or Later
 
@@ -195,7 +195,7 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 ```bash
 go test ./...
 go vet ./...
-go test -race ./internal/transfer ./internal/tui
+go test -race ./internal/transfer ./internal/tui ./internal/sshnet
 go build ./...
 go build -o ./velo-ssh .
 ```
