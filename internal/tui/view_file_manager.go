@@ -44,6 +44,9 @@ func (m Model) viewFileManager() string {
 		if m.renaming {
 			fmt.Fprintf(&b, "\nRename: %s\n", m.renameInput.View())
 		}
+		if m.creatingDir {
+			fmt.Fprintf(&b, "\nNew directory: %s\n", m.mkdirInput.View())
+		}
 		return b.String()
 	}
 	fmt.Fprintf(&b, "%s LOCAL: %s\n", leftMarker, m.localDir)
@@ -76,6 +79,9 @@ func (m Model) viewFileManager() string {
 	fmt.Fprintln(&b)
 	if m.renaming {
 		fmt.Fprintf(&b, "Rename: %s\n", m.renameInput.View())
+	}
+	if m.creatingDir {
+		fmt.Fprintf(&b, "New directory: %s\n", m.mkdirInput.View())
 	}
 	return b.String()
 }
@@ -135,7 +141,7 @@ func (m Model) fileViewportRows() int {
 		return 20
 	}
 	rows := m.height - 10
-	if m.renaming {
+	if m.renaming || m.creatingDir {
 		rows -= 2
 	}
 	if m.err != "" {

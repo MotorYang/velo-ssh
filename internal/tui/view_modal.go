@@ -1,9 +1,10 @@
 package tui
 
 const (
-	modalDelete    = "delete"
-	modalHostKey   = "host_key"
-	modalOverwrite = "overwrite"
+	modalDelete     = "delete"
+	modalHostKey    = "host_key"
+	modalOverwrite  = "overwrite"
+	modalFileDelete = "file_delete"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -50,12 +51,36 @@ func (m Model) viewOverwriteConfirm() string {
 	return m.viewModal(message)
 }
 
+func (m Model) viewFileDeleteConfirm() string {
+	items := m.pendingFileDelete
+	if len(items) > 6 {
+		items = items[:6]
+	}
+	scope := "local"
+	if m.pendingDeleteRemote {
+		scope = "remote"
+	}
+	message := "Delete selected " + scope + " path(s)?\n\n"
+	for _, item := range items {
+		message += "- " + item.Path + "\n"
+	}
+	if len(m.pendingFileDelete) > len(items) {
+		message += "- ...\n"
+	}
+	message += "\nThis operation cannot be undone by VeloSSH.\n\n"
+	message += "[Enter]/[y] Delete | [Esc]/[n] Cancel"
+	return m.viewModal(message)
+}
+
 func (m Model) viewConfirmModal() string {
 	if m.modalKind == modalHostKey {
 		return m.viewHostKeyConfirm()
 	}
 	if m.modalKind == modalOverwrite {
 		return m.viewOverwriteConfirm()
+	}
+	if m.modalKind == modalFileDelete {
+		return m.viewFileDeleteConfirm()
 	}
 	return m.viewDeleteConfirm()
 }

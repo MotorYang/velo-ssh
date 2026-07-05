@@ -68,10 +68,13 @@ func (m Model) helpText() string {
 		if m.renaming {
 			return "[Enter] Save Rename | [Esc] Cancel Rename"
 		}
-		if m.config.Settings.DefaultViewMode == "single" {
-			return "[b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks | [Esc] Back"
+		if m.creatingDir {
+			return "[Enter] Create Directory | [Esc] Cancel"
 		}
-		return "[Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks | [Esc] Back"
+		if m.config.Settings.DefaultViewMode == "single" {
+			return "[b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks | [Esc] Back"
+		}
+		return "[Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks | [Esc] Back"
 	case app.StateTaskCenter:
 		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [R] Refresh | [t]/[q]/[Esc] Back"
 	case app.StateConfirmModal:
@@ -80,6 +83,9 @@ func (m Model) helpText() string {
 		}
 		if m.modalKind == modalOverwrite {
 			return "[Enter]/[y] Overwrite | [Esc]/[n] Cancel"
+		}
+		if m.modalKind == modalFileDelete {
+			return "[Enter]/[y] Delete | [Esc]/[n] Cancel"
 		}
 		return "[Enter]/[y] Confirm | [Esc]/[n] Cancel"
 	case app.StateShell:

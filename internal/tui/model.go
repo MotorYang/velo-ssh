@@ -61,6 +61,8 @@ type Model struct {
 	searchInput          textinput.Model
 	renaming             bool
 	renameInput          textinput.Model
+	creatingDir          bool
+	mkdirInput           textinput.Model
 	form                 serverForm
 	settingsForm         settingsForm
 	modalKind            string
@@ -72,6 +74,8 @@ type Model struct {
 	pendingTransferDir   transfer.Direction
 	pendingTransferItems []fileItem
 	pendingOverwrite     []string
+	pendingFileDelete    []fileItem
+	pendingDeleteRemote  bool
 }
 
 type serverForm struct {
@@ -122,6 +126,8 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 	m.searchInput.CharLimit = 120
 	m.renameInput = textinput.New()
 	m.renameInput.CharLimit = 256
+	m.mkdirInput = textinput.New()
+	m.mkdirInput.CharLimit = 256
 	m.settingsForm = newSettingsForm(cfg.Settings)
 	m.refreshLocalFiles()
 	return m
@@ -575,6 +581,9 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.modalKind == modalOverwrite {
 		return m.handleOverwriteConfirmKey(msg)
 	}
+	if m.modalKind == modalFileDelete {
+		return m.handleFileDeleteConfirmKey(msg)
+	}
 	switch msg.String() {
 	case keyEsc, "n", "N":
 		m.state = m.previous
@@ -624,6 +633,28 @@ func (m *Model) clearOverwritePrompt() {
 	m.pendingTransferDir = ""
 	m.pendingTransferItems = nil
 	m.pendingOverwrite = nil
+}
+
+func (m Model) handleFileDeleteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEsc, "n", "N":
+		m.status = "Delete canceled."
+		m.clearFileDeletePrompt()
+		m.state = m.previous
+	case keyEnter, "y", "Y":
+		items := append([]fileItem(nil), m.pendingFileDelete...)
+		remote := m.pendingDeleteRemote
+		m.clearFileDeletePrompt()
+		m.state = app.StateFileManager
+		return m, m.deleteFilesCmd(items, remote)
+	}
+	return m, nil
+}
+
+func (m *Model) clearFileDeletePrompt() {
+	m.modalKind = ""
+	m.pendingFileDelete = nil
+	m.pendingDeleteRemote = false
 }
 
 func (m Model) handleHostKeyConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -736,6 +767,22 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	if m.creatingDir {
+		switch msg.String() {
+		case keyEsc:
+			m.creatingDir = false
+			m.mkdirInput.Blur()
+			return m, nil
+		case keyEnter:
+			m.creatingDir = false
+			m.mkdirInput.Blur()
+			return m, m.mkdirCurrentCmd(m.mkdirInput.Value())
+		default:
+			var cmd tea.Cmd
+			m.mkdirInput, cmd = m.mkdirInput.Update(msg)
+			return m, cmd
+		}
+	}
 	files := m.currentFiles()
 	cursor := m.currentFileCursor()
 	switch msg.String() {
@@ -805,6 +852,22 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.renameInput.SetValue(files[cursor].Name)
 		m.renameInput.Focus()
 		return m, textinput.Blink
+	case "n":
+		m.creatingDir = true
+		m.mkdirInput.SetValue("")
+		m.mkdirInput.Focus()
+		return m, textinput.Blink
+	case "x":
+		items := selectedFileItems(files, cursor)
+		if len(items) == 0 {
+			m.err = "no file selected for delete"
+			return m, nil
+		}
+		m.previous = m.state
+		m.modalKind = modalFileDelete
+		m.pendingFileDelete = items
+		m.pendingDeleteRemote = m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1
+		m.state = app.StateConfirmModal
 	case "u":
 		return m, m.startUploadCmd(false, nil)
 	case "d":

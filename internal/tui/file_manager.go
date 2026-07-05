@@ -15,6 +15,7 @@ import (
 	"github.com/motoryang/velo-ssh/internal/config"
 	"github.com/motoryang/velo-ssh/internal/sshnet"
 	"github.com/motoryang/velo-ssh/internal/transfer"
+	"github.com/pkg/sftp"
 )
 
 func (m Model) connectFileManagerCmd(srv config.Server) tea.Cmd {
@@ -94,6 +95,77 @@ func (m Model) renameCurrentCmd(newName string) tea.Cmd {
 		}
 		remote, err := listRemoteFiles(client, m.remoteDir)
 		return filePanesLoadedMsg{local: m.localFiles, remote: remote, err: err}
+	}
+}
+
+func (m Model) mkdirCurrentCmd(name string) tea.Cmd {
+	name = strings.TrimSpace(name)
+	return func() tea.Msg {
+		if name == "" || strings.Contains(name, "/") || strings.Contains(name, string(os.PathSeparator)) {
+			return filePanesLoadedMsg{err: fmt.Errorf("create directory failed: target name must be a plain directory name")}
+		}
+		if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 {
+			target := filepath.Join(m.localDir, name)
+			if err := os.Mkdir(target, 0o755); err != nil {
+				return filePanesLoadedMsg{err: fmt.Errorf("create local directory %s: %w", target, err)}
+			}
+			local, err := listLocalFiles(m.localDir)
+			return filePanesLoadedMsg{local: local, remote: m.remoteFiles, err: err}
+		}
+		if m.ssh == nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("create remote directory failed: ssh client is not connected")}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		client, err := m.ssh.OpenSFTP(ctx)
+		if err != nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("create remote directory failed: open sftp: %w", err)}
+		}
+		target := path.Join(m.remoteDir, name)
+		if err := client.Mkdir(target); err != nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("create remote directory %s: %w", target, err)}
+		}
+		remote, err := listRemoteFiles(client, m.remoteDir)
+		return filePanesLoadedMsg{local: m.localFiles, remote: remote, err: err}
+	}
+}
+
+func (m Model) deleteFilesCmd(items []fileItem, remote bool) tea.Cmd {
+	return func() tea.Msg {
+		if len(items) == 0 {
+			return filePanesLoadedMsg{err: fmt.Errorf("delete failed: no file selected")}
+		}
+		if !remote {
+			for _, item := range items {
+				if item.Name == ".." {
+					continue
+				}
+				if err := os.RemoveAll(item.Path); err != nil {
+					return filePanesLoadedMsg{err: fmt.Errorf("delete local path %s: %w", item.Path, err)}
+				}
+			}
+			local, err := listLocalFiles(m.localDir)
+			return filePanesLoadedMsg{local: local, remote: m.remoteFiles, err: err}
+		}
+		if m.ssh == nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("delete remote path failed: ssh client is not connected")}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		client, err := m.ssh.OpenSFTP(ctx)
+		if err != nil {
+			return filePanesLoadedMsg{err: fmt.Errorf("delete remote path failed: open sftp: %w", err)}
+		}
+		for _, item := range items {
+			if item.Name == ".." {
+				continue
+			}
+			if err := removeRemoteRecursive(client, item.Path); err != nil {
+				return filePanesLoadedMsg{err: fmt.Errorf("delete remote path %s: %w", item.Path, err)}
+			}
+		}
+		remoteFiles, err := listRemoteFiles(client, m.remoteDir)
+		return filePanesLoadedMsg{local: m.localFiles, remote: remoteFiles, err: err}
 	}
 }
 
@@ -269,6 +341,10 @@ func sortFileItems(items []fileItem) {
 }
 
 func selectedTransferItems(items []fileItem, cursor int) []fileItem {
+	return selectedFileItems(items, cursor)
+}
+
+func selectedFileItems(items []fileItem, cursor int) []fileItem {
 	var selected []fileItem
 	for _, item := range items {
 		if item.Selected && item.Name != ".." {
@@ -282,6 +358,26 @@ func selectedTransferItems(items []fileItem, cursor int) []fileItem {
 		return []fileItem{items[cursor]}
 	}
 	return nil
+}
+
+func removeRemoteRecursive(client *sftp.Client, remotePath string) error {
+	info, err := client.Stat(remotePath)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return client.Remove(remotePath)
+	}
+	entries, err := client.ReadDir(remotePath)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := removeRemoteRecursive(client, path.Join(remotePath, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return client.RemoveDirectory(remotePath)
 }
 
 func newTaskID(prefix string) string {

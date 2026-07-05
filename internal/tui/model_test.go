@@ -572,6 +572,82 @@ func TestFileManagerEnterLocalDirectory(t *testing.T) {
 	}
 }
 
+func TestFileManagerCreateLocalDirectory(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localDir = dir
+	local, err := listLocalFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.localFiles = local
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = updated.(Model)
+	if !m.creatingDir {
+		t.Fatal("expected create directory input mode")
+	}
+	m.mkdirInput.SetValue("new-dir")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected mkdir command")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if _, err := os.Stat(filepath.Join(dir, "new-dir")); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.localFiles) == 0 {
+		t.Fatal("expected local files to refresh")
+	}
+}
+
+func TestFileManagerDeleteLocalDirectoryWithConfirm(t *testing.T) {
+	dir := t.TempDir()
+	child := filepath.Join(dir, "delete-me")
+	if err := os.Mkdir(child, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localDir = dir
+	local, err := listLocalFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.localFiles = local
+	for i, item := range m.localFiles {
+		if item.Name == "delete-me" {
+			m.localCursor = i
+			break
+		}
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(Model)
+	if m.state != app.StateConfirmModal || m.modalKind != modalFileDelete {
+		t.Fatalf("state=%s modal=%s, want file delete confirm", m.state, m.modalKind)
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected delete command")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if _, err := os.Stat(child); !os.IsNotExist(err) {
+		t.Fatalf("deleted path still exists or unexpected stat error: %v", err)
+	}
+}
+
 func TestSettingsSave(t *testing.T) {
 	store := config.NewStore(t.TempDir())
 	m := NewModel(app.StateSettingsCenter, store, config.DefaultFile())

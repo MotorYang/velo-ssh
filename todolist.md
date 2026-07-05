@@ -102,17 +102,17 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 
 ## File Manager
 
-- [ ] Add create local directory.
-- [ ] Add create remote directory.
-- [ ] Add delete local file.
-- [ ] Add delete remote file.
-- [ ] Add delete local directory.
-- [ ] Add delete remote directory.
-- [ ] Add confirmation modal for destructive file operations.
-- [ ] Add clear error when folder upload is attempted in MVP.
-- [ ] Add clear error when folder download is attempted in MVP.
-- [ ] Keep existing target files intact on failed upload.
-- [ ] Keep existing target files intact on failed download.
+- [x] Add create local directory.
+- [x] Add create remote directory.
+- [x] Add delete local file.
+- [x] Add delete remote file.
+- [x] Add delete local directory.
+- [x] Add delete remote directory.
+- [x] Add confirmation modal for destructive file operations.
+- [x] Add clear error when folder upload is attempted in MVP.
+- [x] Add clear error when folder download is attempted in MVP.
+- [x] Keep existing target files intact on failed upload.
+- [x] Keep existing target files intact on failed download.
 - [ ] Handle permission denied errors with action/path/recovery wording.
 - [ ] Handle disk full errors with action/path/recovery wording.
 - [ ] Handle file exists errors with action/path/recovery wording.
