@@ -114,6 +114,8 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Add same-pane remote copy/paste.
 - [x] Add same-pane remote move.
 - [x] Reject cross-pane paste with upload/download guidance.
+- [x] Add recursive folder upload using per-file atomic transfer tasks.
+- [x] Add recursive folder download using per-file atomic transfer tasks.
 - [x] Add clear error when folder upload is attempted in MVP.
 - [x] Add clear error when folder download is attempted in MVP.
 - [x] Keep existing target files intact on failed upload.

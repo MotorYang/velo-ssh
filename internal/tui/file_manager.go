@@ -246,37 +246,32 @@ func (m Model) startUploadCmd(force bool, items []fileItem) tea.Cmd {
 		if err != nil {
 			return transferStartedMsg{err: err}
 		}
+		plans, err := prepareUploadPlans(client, items, m.remoteDir)
+		if err != nil {
+			return transferStartedMsg{err: err}
+		}
 		if m.config.Settings.ConfirmOverwrite && !force {
 			var existing []string
-			for _, item := range items {
-				if item.IsDir {
-					continue
-				}
-				target := path.Join(m.remoteDir, item.Name)
-				if _, err := client.Stat(target); err == nil {
-					existing = append(existing, target)
+			for _, plan := range plans {
+				if _, err := client.Stat(plan.target); err == nil {
+					existing = append(existing, plan.target)
 				} else if !os.IsNotExist(err) {
-					return transferStartedMsg{err: actionError("check remote upload target", target, err)}
+					return transferStartedMsg{err: actionError("check remote upload target", plan.target, err)}
 				}
 			}
 			if len(existing) > 0 {
 				return overwritePromptMsg{direction: transfer.Upload, items: items, targets: existing}
 			}
 		}
-		started := 0
-		for _, item := range items {
-			if item.IsDir {
-				continue
-			}
-			task := transfer.NewTask(newTaskID("up"), transfer.Upload, item.Path, path.Join(m.remoteDir, item.Name))
+		for _, plan := range plans {
+			task := transfer.NewTask(newTaskID("up"), transfer.Upload, plan.source, plan.target)
 			task.ServerID = m.activeServer.ID
 			m.tasks.Start(context.Background(), client, task)
-			started++
 		}
-		if started == 0 {
-			return transferStartedMsg{err: fmt.Errorf("folder upload is not implemented in MVP")}
+		if len(plans) == 0 {
+			return transferStartedMsg{err: fmt.Errorf("upload failed: selected folder contains no regular files")}
 		}
-		return transferStartedMsg{message: fmt.Sprintf("Started %d upload task(s).", started)}
+		return transferStartedMsg{message: fmt.Sprintf("Started %d upload task(s).", len(plans))}
 	}
 }
 
@@ -291,43 +286,38 @@ func (m Model) startDownloadCmd(force bool, items []fileItem) tea.Cmd {
 		if len(items) == 0 {
 			return transferStartedMsg{err: fmt.Errorf("no remote file selected for download")}
 		}
-		if m.config.Settings.ConfirmOverwrite && !force {
-			var existing []string
-			for _, item := range items {
-				if item.IsDir {
-					continue
-				}
-				target := filepath.Join(m.localDir, item.Name)
-				if _, err := os.Stat(target); err == nil {
-					existing = append(existing, target)
-				} else if !os.IsNotExist(err) {
-					return transferStartedMsg{err: actionError("check local download target", target, err)}
-				}
-			}
-			if len(existing) > 0 {
-				return overwritePromptMsg{direction: transfer.Download, items: items, targets: existing}
-			}
-		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		client, err := m.ssh.OpenSFTP(ctx)
 		if err != nil {
 			return transferStartedMsg{err: err}
 		}
-		started := 0
-		for _, item := range items {
-			if item.IsDir {
-				continue
+		plans, err := prepareDownloadPlans(client, items, m.localDir)
+		if err != nil {
+			return transferStartedMsg{err: err}
+		}
+		if m.config.Settings.ConfirmOverwrite && !force {
+			var existing []string
+			for _, plan := range plans {
+				if _, err := os.Stat(plan.target); err == nil {
+					existing = append(existing, plan.target)
+				} else if !os.IsNotExist(err) {
+					return transferStartedMsg{err: actionError("check local download target", plan.target, err)}
+				}
 			}
-			task := transfer.NewTask(newTaskID("down"), transfer.Download, item.Path, filepath.Join(m.localDir, item.Name))
+			if len(existing) > 0 {
+				return overwritePromptMsg{direction: transfer.Download, items: items, targets: existing}
+			}
+		}
+		for _, plan := range plans {
+			task := transfer.NewTask(newTaskID("down"), transfer.Download, plan.source, plan.target)
 			task.ServerID = m.activeServer.ID
 			m.tasks.Start(context.Background(), client, task)
-			started++
 		}
-		if started == 0 {
-			return transferStartedMsg{err: fmt.Errorf("folder download is not implemented in MVP")}
+		if len(plans) == 0 {
+			return transferStartedMsg{err: fmt.Errorf("download failed: selected folder contains no regular files")}
 		}
-		return transferStartedMsg{message: fmt.Sprintf("Started %d download task(s).", started)}
+		return transferStartedMsg{message: fmt.Sprintf("Started %d download task(s).", len(plans))}
 	}
 }
 
@@ -357,6 +347,131 @@ func listLocalFiles(dir string) ([]fileItem, error) {
 
 type remoteReadDir interface {
 	ReadDir(string) ([]os.FileInfo, error)
+}
+
+type transferPlan struct {
+	source string
+	target string
+}
+
+func prepareUploadPlans(client *sftp.Client, items []fileItem, remoteDir string) ([]transferPlan, error) {
+	var plans []transferPlan
+	for _, item := range items {
+		if item.Name == ".." {
+			continue
+		}
+		target := path.Join(remoteDir, item.Name)
+		if item.IsDir {
+			if err := ensureRemoteDir(client, target, item.Mode); err != nil {
+				return nil, actionError("create remote upload directory", target, err)
+			}
+			childPlans, err := collectUploadDirPlans(client, item.Path, target)
+			if err != nil {
+				return nil, err
+			}
+			plans = append(plans, childPlans...)
+			continue
+		}
+		plans = append(plans, transferPlan{source: item.Path, target: target})
+	}
+	return plans, nil
+}
+
+func collectUploadDirPlans(client *sftp.Client, localDir, remoteDir string) ([]transferPlan, error) {
+	return collectLocalUploadPlans(localDir, remoteDir, func(remotePath string, mode os.FileMode) error {
+		return ensureRemoteDir(client, remotePath, mode)
+	})
+}
+
+func collectLocalUploadPlans(localDir, remoteDir string, ensureDir func(string, os.FileMode) error) ([]transferPlan, error) {
+	entries, err := os.ReadDir(localDir)
+	if err != nil {
+		return nil, actionError("read local upload directory", localDir, err)
+	}
+	var plans []transferPlan
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			return nil, actionError("stat local upload path", filepath.Join(localDir, entry.Name()), err)
+		}
+		localPath := filepath.Join(localDir, entry.Name())
+		remotePath := path.Join(remoteDir, entry.Name())
+		if info.IsDir() {
+			if err := ensureDir(remotePath, info.Mode()); err != nil {
+				return nil, actionError("create remote upload directory", remotePath, err)
+			}
+			childPlans, err := collectLocalUploadPlans(localPath, remotePath, ensureDir)
+			if err != nil {
+				return nil, err
+			}
+			plans = append(plans, childPlans...)
+			continue
+		}
+		if info.Mode().IsRegular() {
+			plans = append(plans, transferPlan{source: localPath, target: remotePath})
+		}
+	}
+	return plans, nil
+}
+
+func prepareDownloadPlans(client *sftp.Client, items []fileItem, localDir string) ([]transferPlan, error) {
+	var plans []transferPlan
+	for _, item := range items {
+		if item.Name == ".." {
+			continue
+		}
+		target := filepath.Join(localDir, item.Name)
+		if item.IsDir {
+			if err := os.MkdirAll(target, item.Mode.Perm()); err != nil {
+				return nil, actionError("create local download directory", target, err)
+			}
+			childPlans, err := collectDownloadDirPlans(client, item.Path, target)
+			if err != nil {
+				return nil, err
+			}
+			plans = append(plans, childPlans...)
+			continue
+		}
+		plans = append(plans, transferPlan{source: item.Path, target: target})
+	}
+	return plans, nil
+}
+
+func collectDownloadDirPlans(client *sftp.Client, remoteDir, localDir string) ([]transferPlan, error) {
+	entries, err := client.ReadDir(remoteDir)
+	if err != nil {
+		return nil, actionError("read remote download directory", remoteDir, err)
+	}
+	var plans []transferPlan
+	for _, entry := range entries {
+		remotePath := path.Join(remoteDir, entry.Name())
+		localPath := filepath.Join(localDir, entry.Name())
+		if entry.IsDir() {
+			if err := os.MkdirAll(localPath, entry.Mode().Perm()); err != nil {
+				return nil, actionError("create local download directory", localPath, err)
+			}
+			childPlans, err := collectDownloadDirPlans(client, remotePath, localPath)
+			if err != nil {
+				return nil, err
+			}
+			plans = append(plans, childPlans...)
+			continue
+		}
+		if entry.Mode().IsRegular() {
+			plans = append(plans, transferPlan{source: remotePath, target: localPath})
+		}
+	}
+	return plans, nil
+}
+
+func ensureRemoteDir(client *sftp.Client, remotePath string, mode os.FileMode) error {
+	if err := client.MkdirAll(remotePath); err != nil {
+		return err
+	}
+	if mode != 0 {
+		_ = client.Chmod(remotePath, mode.Perm())
+	}
+	return nil
 }
 
 func listRemoteFiles(client remoteReadDir, dir string) ([]fileItem, error) {

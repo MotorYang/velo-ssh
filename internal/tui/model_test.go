@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -820,6 +821,37 @@ func TestFileManagerRejectsCrossPanePaste(t *testing.T) {
 	m = updated.(Model)
 	if !strings.Contains(m.err, "cross-pane copy") {
 		t.Fatalf("err = %q, want cross-pane rejection", m.err)
+	}
+}
+
+func TestCollectLocalUploadPlansForNestedFolder(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "nested")
+	if err := os.Mkdir(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "root.txt"), []byte("root"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "child.txt"), []byte("child"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var madeDirs []string
+	plans, err := collectLocalUploadPlans(dir, "/remote/base", func(remotePath string, _ os.FileMode) error {
+		madeDirs = append(madeDirs, remotePath)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotTargets := []string{plans[0].target, plans[1].target}
+	sort.Strings(gotTargets)
+	wantTargets := []string{"/remote/base/nested/child.txt", "/remote/base/root.txt"}
+	if strings.Join(gotTargets, ",") != strings.Join(wantTargets, ",") {
+		t.Fatalf("targets = %v, want %v", gotTargets, wantTargets)
+	}
+	if len(madeDirs) != 1 || madeDirs[0] != "/remote/base/nested" {
+		t.Fatalf("made dirs = %v, want nested dir", madeDirs)
 	}
 }
 
