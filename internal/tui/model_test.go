@@ -14,6 +14,7 @@ import (
 	"github.com/motoryang/velo-ssh/internal/config"
 	"github.com/motoryang/velo-ssh/internal/sshnet"
 	"github.com/motoryang/velo-ssh/internal/transfer"
+	"github.com/motoryang/velo-ssh/internal/updater"
 )
 
 func TestSmallTerminalFallback(t *testing.T) {
@@ -126,6 +127,9 @@ func TestServerListUsesBorderedPanel(t *testing.T) {
 	got := m.viewServerList()
 	if !strings.HasPrefix(got, "+") || !strings.Contains(got, "VeloSSH Manager") || !strings.Contains(got, "|") {
 		t.Fatalf("server list should render bordered panel: %q", got)
+	}
+	if !strings.Contains(got, "Version: v1.0.0.26070601") {
+		t.Fatalf("server list should render version: %q", got)
 	}
 }
 
@@ -263,6 +267,35 @@ func TestConfirmModalUsesChineseText(t *testing.T) {
 	}
 	if strings.Contains(got, "Delete server") || strings.Contains(got, "This removes it") {
 		t.Fatalf("confirm zh view still contains English prompt: %q", got)
+	}
+}
+
+func TestUpdateAvailablePromptCanSkipVersion(t *testing.T) {
+	store := config.NewStore(t.TempDir())
+	m := NewModel(app.StateServerList, store, config.DefaultFile())
+	rel := updater.Release{Version: "v1.0.0.26070602", URL: "https://example.com/release"}
+	updated, _ := m.Update(updateAvailableMsg{release: rel})
+	m = updated.(Model)
+	if m.state != app.StateConfirmModal || m.modalKind != modalUpdateAvailable {
+		t.Fatalf("state=%s modal=%s, want update prompt", m.state, m.modalKind)
+	}
+	got := m.viewConfirmModal()
+	for _, want := range []string{"Update available", "v1.0.0.26070601", "v1.0.0.26070602"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("update prompt missing %q in %q", want, got)
+		}
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m = updated.(Model)
+	if m.state != app.StateServerList || m.config.Settings.SkippedUpdateVersion != rel.Version {
+		t.Fatalf("state=%s skipped=%q", m.state, m.config.Settings.SkippedUpdateVersion)
+	}
+	saved, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Settings.SkippedUpdateVersion != rel.Version {
+		t.Fatalf("saved skipped version = %q", saved.Settings.SkippedUpdateVersion)
 	}
 }
 
@@ -1248,6 +1281,7 @@ func TestSettingsFormEditsAllFields(t *testing.T) {
 	m.settingsForm.fields[settingsFieldLanguage].SetValue(config.LanguageSimplifiedChinese)
 	m.settingsForm.fields[settingsFieldConfirmOverwrite].SetValue("false")
 	m.settingsForm.fields[settingsFieldKnownHostsPolicy].SetValue(config.HostKeyStrict)
+	m.settingsForm.fields[settingsFieldCheckUpdates].SetValue("false")
 	m.settingsForm.blurCurrent()
 	m.settingsForm.index = m.settingsForm.okIndex()
 
@@ -1269,7 +1303,8 @@ func TestSettingsFormEditsAllFields(t *testing.T) {
 		saved.Settings.Theme != "compact" ||
 		saved.Settings.Language != config.LanguageSimplifiedChinese ||
 		saved.Settings.ConfirmOverwrite ||
-		saved.Settings.KnownHostsPolicy != config.HostKeyStrict {
+		saved.Settings.KnownHostsPolicy != config.HostKeyStrict ||
+		!saved.Settings.DisableUpdateCheck {
 		t.Fatalf("saved settings = %+v", saved.Settings)
 	}
 }

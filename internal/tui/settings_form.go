@@ -20,6 +20,7 @@ const (
 	settingsFieldLanguage
 	settingsFieldConfirmOverwrite
 	settingsFieldKnownHostsPolicy
+	settingsFieldCheckUpdates
 )
 
 var settingsFormLabels = []string{
@@ -33,6 +34,7 @@ var settingsFormLabels = []string{
 	"Language",
 	"Confirm Overwrite",
 	"Known Hosts Policy",
+	"Check Updates",
 }
 
 var settingsFieldOptions = map[int][]string{
@@ -41,6 +43,7 @@ var settingsFieldOptions = map[int][]string{
 	settingsFieldLanguage:         {config.LanguageEnglish, config.LanguageSimplifiedChinese},
 	settingsFieldConfirmOverwrite: {"true", "false"},
 	settingsFieldKnownHostsPolicy: {config.HostKeyStrict, config.HostKeyAsk, config.HostKeyInsecure},
+	settingsFieldCheckUpdates:     {"true", "false"},
 }
 
 type settingsForm struct {
@@ -60,6 +63,7 @@ func newSettingsForm(settings config.Settings) settingsForm {
 		defaultString(settings.Language, config.LanguageEnglish),
 		strconv.FormatBool(settings.ConfirmOverwrite),
 		defaultString(settings.KnownHostsPolicy, config.HostKeyAsk),
+		strconv.FormatBool(!settings.DisableUpdateCheck),
 	}
 	fields := make([]textinput.Model, len(settingsFormLabels))
 	for i := range fields {
@@ -203,6 +207,10 @@ func (f settingsForm) settings() (config.Settings, error) {
 	if !oneOf(knownHostsPolicy, config.HostKeyStrict, config.HostKeyAsk, config.HostKeyInsecure) {
 		return config.Settings{}, fmt.Errorf("knownHostsPolicy must be strict, ask, or insecure")
 	}
+	checkUpdates, err := parseBool(f.fields[settingsFieldCheckUpdates].Value(), "checkUpdates")
+	if err != nil {
+		return config.Settings{}, err
+	}
 	return config.Settings{
 		DefaultViewMode:     defaultViewMode,
 		ASCIIFallback:       asciiFallback,
@@ -214,6 +222,7 @@ func (f settingsForm) settings() (config.Settings, error) {
 		Language:            language,
 		ConfirmOverwrite:    confirmOverwrite,
 		KnownHostsPolicy:    knownHostsPolicy,
+		DisableUpdateCheck:  !checkUpdates,
 	}, nil
 }
 

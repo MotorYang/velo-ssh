@@ -8,6 +8,9 @@ VERSION_LDFLAGS="${VERSION_LDFLAGS:-}"
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 BIN_PATH="$BINDIR/$APP_NAME"
+if [ -z "$VERSION_LDFLAGS" ] && [ -f "$ROOT_DIR/VERSION" ]; then
+  VERSION_LDFLAGS="-X github.com/motoryang/velo-ssh/internal/version.Current=$(cat "$ROOT_DIR/VERSION")"
+fi
 
 if ! command -v go >/dev/null 2>&1; then
   echo "go is required to build VeloSSH" >&2

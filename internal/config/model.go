@@ -31,16 +31,18 @@ type File struct {
 }
 
 type Settings struct {
-	DefaultViewMode     string `json:"defaultViewMode"`
-	ASCIIFallback       string `json:"asciiFallback"`
-	FallbackRemotePath  string `json:"fallbackRemotePath"`
-	DraftTTLDays        int    `json:"draftTTLDays"`
-	TransferConcurrency int    `json:"transferConcurrency"`
-	KeepAliveSeconds    int    `json:"keepAliveSeconds"`
-	Theme               string `json:"theme"`
-	Language            string `json:"language"`
-	ConfirmOverwrite    bool   `json:"confirmOverwrite"`
-	KnownHostsPolicy    string `json:"knownHostsPolicy"`
+	DefaultViewMode      string `json:"defaultViewMode"`
+	ASCIIFallback        string `json:"asciiFallback"`
+	FallbackRemotePath   string `json:"fallbackRemotePath"`
+	DraftTTLDays         int    `json:"draftTTLDays"`
+	TransferConcurrency  int    `json:"transferConcurrency"`
+	KeepAliveSeconds     int    `json:"keepAliveSeconds"`
+	Theme                string `json:"theme"`
+	Language             string `json:"language"`
+	ConfirmOverwrite     bool   `json:"confirmOverwrite"`
+	KnownHostsPolicy     string `json:"knownHostsPolicy"`
+	DisableUpdateCheck   bool   `json:"disableUpdateCheck"`
+	SkippedUpdateVersion string `json:"skippedUpdateVersion"`
 }
 
 type Server struct {

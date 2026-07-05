@@ -7,12 +7,14 @@ import (
 
 	"github.com/motoryang/velo-ssh/internal/config"
 	"github.com/motoryang/velo-ssh/internal/term"
+	"github.com/motoryang/velo-ssh/internal/version"
 )
 
 func (m Model) viewServerList() string {
 	width := m.contentWidth()
 	inner := width - 2
 	body := []string{}
+	body = append(body, m.tr(textVersion)+": "+version.String())
 	if m.searching {
 		body = append(body, m.tr(textSearch)+": "+m.searchInput.View())
 	} else if m.filter != "" {
