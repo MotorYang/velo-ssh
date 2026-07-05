@@ -786,8 +786,6 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	files := m.currentFiles()
 	cursor := m.currentFileCursor()
 	switch msg.String() {
-	case keyEsc:
-		m.state = m.previous
 	case "q":
 		if m.ssh != nil {
 			m.previous = m.state

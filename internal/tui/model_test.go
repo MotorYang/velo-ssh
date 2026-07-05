@@ -204,6 +204,29 @@ func TestChangedHostKeyDoesNotOpenConfirmModal(t *testing.T) {
 	}
 }
 
+func TestConfirmModalIsBorderedAndCentered(t *testing.T) {
+	m := NewModel(app.StateConfirmModal, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.width = 120
+	m.height = 32
+	m.modalKind = modalOverwrite
+	m.pendingOverwrite = []string{"/tmp/existing.txt"}
+	got := m.viewConfirmModal()
+	if !strings.Contains(got, "+---") || !strings.Contains(got, "|") || !strings.Contains(got, "Confirm") {
+		t.Fatalf("confirm modal should render bordered panel: %q", got)
+	}
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	firstPanelLine := ""
+	for _, line := range lines {
+		if strings.Contains(line, "+---") {
+			firstPanelLine = line
+			break
+		}
+	}
+	if !strings.HasPrefix(firstPanelLine, " ") {
+		t.Fatalf("confirm modal should be horizontally centered, first panel line=%q", firstPanelLine)
+	}
+}
+
 func TestFileManagerSelection(t *testing.T) {
 	cfg := config.DefaultFile()
 	cfg.Settings.DefaultViewMode = config.ViewSplit
@@ -222,6 +245,29 @@ func TestFileManagerSelection(t *testing.T) {
 	m = updated.(Model)
 	if m.localFiles[1].Selected {
 		t.Fatal("expected clear selection to deselect local file")
+	}
+}
+
+func TestFileManagerEscDoesNotLeavePanel(t *testing.T) {
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.previous = app.StateServerList
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.state != app.StateFileManager {
+		t.Fatalf("state after esc = %s, want file manager", m.state)
+	}
+	if strings.Contains(m.helpText(), "[Esc] Back") {
+		t.Fatalf("file manager help should not include Esc Back: %q", m.helpText())
+	}
+}
+
+func TestFileManagerQLeavesPanel(t *testing.T) {
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.previous = app.StateServerList
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = updated.(Model)
+	if m.state != app.StateServerList {
+		t.Fatalf("state after q = %s, want server list", m.state)
 	}
 }
 

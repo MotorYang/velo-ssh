@@ -1,5 +1,11 @@
 package tui
 
+import (
+	"strings"
+
+	"github.com/motoryang/velo-ssh/internal/term"
+)
+
 const (
 	modalDelete     = "delete"
 	modalHostKey    = "host_key"
@@ -11,8 +17,25 @@ const (
 	hostKeyActionReconnect   = "reconnect"
 )
 
+const modalPanelWidth = 88
+
 func (m Model) viewModal(message string) string {
-	return m.styles.title.Render("Confirm") + "\n\n" + message
+	innerWidth := modalPanelWidth - 2
+	lines := []string{
+		"+" + strings.Repeat("-", innerWidth) + "+",
+		"|" + centerVisual(m.styles.title.Render("Confirm"), innerWidth) + "|",
+		"|" + strings.Repeat(" ", innerWidth) + "|",
+	}
+	for _, line := range strings.Split(message, "\n") {
+		line = term.Truncate(line, innerWidth)
+		lines = append(lines, "|"+padVisual(line, innerWidth)+"|")
+	}
+	lines = append(lines, "+"+strings.Repeat("-", innerWidth)+"+")
+	height := m.height
+	if height > 4 {
+		height -= 4
+	}
+	return centerBlock(lines, m.width, height)
 }
 
 func (m Model) viewDeleteConfirm() string {
