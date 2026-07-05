@@ -35,6 +35,10 @@ type serverFormValue struct {
 }
 
 func newServerForm(mode string, srv config.Server) serverForm {
+	defaultRemote := srv.DefaultRemotePath
+	if defaultRemote == "" {
+		defaultRemote = defaultRemotePathForUser(srv.User)
+	}
 	values := []string{
 		srv.ID,
 		srv.Name,
@@ -49,7 +53,7 @@ func newServerForm(mode string, srv config.Server) serverForm {
 		srv.PassphraseRef,
 		"",
 		srv.Desc,
-		defaultString(srv.DefaultRemotePath, "/tmp"),
+		defaultRemote,
 		strings.Join(srv.Tags, ","),
 	}
 	fields := make([]textinput.Model, len(serverFormLabels))
@@ -62,32 +66,29 @@ func newServerForm(mode string, srv config.Server) serverForm {
 	}
 	fields[serverFieldPasswordSecret].EchoMode = textinput.EchoPassword
 	fields[serverFieldPassphraseSecret].EchoMode = textinput.EchoPassword
-	fields[0].Focus()
+	start := serverFieldName
+	fields[start].Focus()
+	initialValues := make([]string, len(values))
+	copy(initialValues, values)
 	return serverForm{
-		mode:       mode,
-		originalID: srv.ID,
-		fields:     fields,
-		index:      0,
+		mode:             mode,
+		originalID:       srv.ID,
+		fields:           fields,
+		initialValues:    initialValues,
+		index:            start,
+		remotePathManual: srv.DefaultRemotePath != "" && srv.DefaultRemotePath != defaultRemotePathForUser(srv.User),
 	}
 }
 
 func (f *serverForm) focusNext() {
 	f.fields[f.index].Blur()
-	if f.index < len(f.fields)-1 {
-		f.index++
-	} else {
-		f.index = 0
-	}
+	f.index = f.nextVisibleIndex(1)
 	f.fields[f.index].Focus()
 }
 
 func (f *serverForm) focusPrev() {
 	f.fields[f.index].Blur()
-	if f.index > 0 {
-		f.index--
-	} else {
-		f.index = len(f.fields) - 1
-	}
+	f.index = f.nextVisibleIndex(-1)
 	f.fields[f.index].Focus()
 }
 
@@ -96,6 +97,10 @@ func (f serverForm) server() (serverFormValue, error) {
 	if err != nil {
 		return serverFormValue{}, fmt.Errorf("port must be a number")
 	}
+	authType := strings.TrimSpace(f.fields[serverFieldAuthType].Value())
+	if authType == "" {
+		authType = config.AuthAgent
+	}
 	srv := config.Server{
 		ID:                strings.TrimSpace(f.fields[serverFieldID].Value()),
 		Name:              strings.TrimSpace(f.fields[serverFieldName].Value()),
@@ -103,7 +108,7 @@ func (f serverForm) server() (serverFormValue, error) {
 		Host:              strings.TrimSpace(f.fields[serverFieldHost].Value()),
 		Port:              port,
 		User:              strings.TrimSpace(f.fields[serverFieldUser].Value()),
-		AuthType:          strings.TrimSpace(f.fields[serverFieldAuthType].Value()),
+		AuthType:          authType,
 		KeyPath:           strings.TrimSpace(f.fields[serverFieldKeyPath].Value()),
 		PasswordRef:       strings.TrimSpace(f.fields[serverFieldPasswordRef].Value()),
 		PassphraseRef:     strings.TrimSpace(f.fields[serverFieldPassphraseRef].Value()),
@@ -118,13 +123,127 @@ func (f serverForm) server() (serverFormValue, error) {
 		srv.Env = "default"
 	}
 	if srv.DefaultRemotePath == "" {
-		srv.DefaultRemotePath = "/tmp"
+		srv.DefaultRemotePath = defaultRemotePathForUser(srv.User)
 	}
 	return serverFormValue{
 		Server:     srv,
 		Password:   f.fields[serverFieldPasswordSecret].Value(),
 		Passphrase: f.fields[serverFieldPassphraseSecret].Value(),
 	}, nil
+}
+
+func (f serverForm) visibleFields() []int {
+	fields := []int{
+		serverFieldName,
+		serverFieldEnv,
+		serverFieldHost,
+		serverFieldPort,
+		serverFieldUser,
+		serverFieldAuthType,
+	}
+	switch f.authType() {
+	case config.AuthKey:
+		fields = append(fields, serverFieldKeyPath, serverFieldPassphraseSecret)
+	case config.AuthPassword:
+		fields = append(fields, serverFieldPasswordSecret)
+	}
+	fields = append(fields, serverFieldDesc, serverFieldDefaultRemotePath, serverFieldTags)
+	return fields
+}
+
+func (f serverForm) isVisible(index int) bool {
+	for _, field := range f.visibleFields() {
+		if field == index {
+			return true
+		}
+	}
+	return false
+}
+
+func (f serverForm) nextVisibleIndex(direction int) int {
+	if direction == 0 {
+		return f.index
+	}
+	index := f.index
+	for i := 0; i < len(f.fields); i++ {
+		index += direction
+		if index < 0 {
+			index = len(f.fields) - 1
+		}
+		if index >= len(f.fields) {
+			index = 0
+		}
+		if f.isVisible(index) {
+			return index
+		}
+	}
+	return f.index
+}
+
+func (f serverForm) lastVisibleIndex() int {
+	fields := f.visibleFields()
+	return fields[len(fields)-1]
+}
+
+func (f serverForm) authType() string {
+	return defaultString(f.fields[serverFieldAuthType].Value(), config.AuthAgent)
+}
+
+func (f serverForm) dirty() bool {
+	if len(f.initialValues) != len(f.fields) {
+		return true
+	}
+	for i, field := range f.fields {
+		if field.Value() != f.initialValues[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *serverForm) cycleAuthType(direction int) {
+	options := []string{config.AuthAgent, config.AuthKey, config.AuthPassword}
+	current := f.authType()
+	idx := 0
+	for i, option := range options {
+		if option == current {
+			idx = i
+			break
+		}
+	}
+	idx += direction
+	if idx < 0 {
+		idx = len(options) - 1
+	}
+	if idx >= len(options) {
+		idx = 0
+	}
+	f.fields[serverFieldAuthType].SetValue(options[idx])
+	if !f.isVisible(f.index) {
+		f.focusNext()
+	}
+}
+
+func (f *serverForm) setUser(value string) {
+	oldUser := f.fields[serverFieldUser].Value()
+	oldDefault := defaultRemotePathForUser(oldUser)
+	f.fields[serverFieldUser].SetValue(value)
+	currentRemote := strings.TrimSpace(f.fields[serverFieldDefaultRemotePath].Value())
+	if !f.remotePathManual || currentRemote == "" || currentRemote == oldDefault {
+		f.fields[serverFieldDefaultRemotePath].SetValue(defaultRemotePathForUser(value))
+		f.remotePathManual = false
+	}
+}
+
+func defaultRemotePathForUser(user string) string {
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "/tmp"
+	}
+	if user == "root" {
+		return "/root"
+	}
+	return "/home/" + user
 }
 
 func splitTags(value string) []string {

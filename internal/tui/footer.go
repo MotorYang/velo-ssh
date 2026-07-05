@@ -77,9 +77,9 @@ func (m Model) helpText() string {
 		if m.searching {
 			return "[Enter] Apply Filter | [Esc] Clear Filter"
 		}
-		return "[j/k] Move | [/] Filter | [Enter] Connect | [f] Files | [S] Settings | [a/e/d] Add/Edit/Delete | [q] Quit"
+		return "[j/k] Move | [/] Filter | [Enter] Connect | [f] Files | [S] Settings | [a/e/c/d] Add/Edit/Clone/Delete | [q] Quit"
 	case app.StateServerForm:
-		return "[Tab/Down] Next | [Shift+Tab/Up] Previous | [Enter] Next/Save | [Esc] Cancel"
+		return "[Tab/Down] Next | [Shift+Tab/Up] Previous | [Left/Right/Space] Change Option | [Enter] Next/Save | [Esc] Cancel"
 	case app.StateSettingsCenter:
 		return ""
 	case app.StateFileManager:
@@ -110,6 +110,9 @@ func (m Model) helpText() string {
 		}
 		if m.modalKind == modalTaskCancel {
 			return "[Enter]/[y] Cancel Task | [Esc]/[n] Keep Task"
+		}
+		if m.modalKind == modalServerFormDiscard {
+			return "[Enter]/[y] Discard Changes | [Esc]/[n] Keep Editing"
 		}
 		return "[Enter]/[y] Confirm | [Esc]/[n] Cancel"
 	case app.StateShell:

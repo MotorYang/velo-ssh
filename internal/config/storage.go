@@ -34,6 +34,10 @@ func (s *Store) DraftsPath() string {
 	return filepath.Join(s.dir, "drafts.json")
 }
 
+func (s *Store) SecretsPath() string {
+	return filepath.Join(s.dir, "secrets.json")
+}
+
 func (s *Store) Load() (File, error) {
 	path := s.ConfigPath()
 	b, err := os.ReadFile(path)

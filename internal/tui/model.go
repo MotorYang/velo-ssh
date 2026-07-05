@@ -88,10 +88,12 @@ type Model struct {
 }
 
 type serverForm struct {
-	mode       string
-	originalID string
-	fields     []textinput.Model
-	index      int
+	mode             string
+	originalID       string
+	fields           []textinput.Model
+	initialValues    []string
+	index            int
+	remotePathManual bool
 }
 
 var serverFormLabels = []string{
@@ -101,12 +103,12 @@ var serverFormLabels = []string{
 	"Host",
 	"Port",
 	"User",
-	"Auth Type (agent/key/password)",
+	"Auth Type",
 	"Key Path",
 	"Password Ref",
-	"Password (store in keyring)",
+	"Password",
 	"Passphrase Ref",
-	"Passphrase (store in keyring)",
+	"Passphrase",
 	"Description",
 	"Default Remote Path",
 	"Tags (comma separated)",
@@ -119,7 +121,7 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 		state:          start,
 		previous:       app.StateServerList,
 		store:          store,
-		secrets:        config.OSKeyring{},
+		secrets:        config.NewSecretStore(store.SecretsPath()),
 		config:         cfg,
 		styles:         newStyles(ascii),
 		ascii:          ascii,
@@ -430,11 +432,11 @@ func (m Model) handleServerListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	servers := m.filteredServers()
 	switch msg.String() {
-	case keyUp, "k":
+	case "k", keyDown:
 		if m.cursor > 0 {
 			m.cursor--
 		}
-	case keyDown, "j":
+	case "j", keyUp:
 		if m.cursor < len(servers)-1 {
 			m.cursor++
 		}
@@ -474,6 +476,17 @@ func (m Model) handleServerListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.state = app.StateServerForm
 			return m, textinput.Blink
 		}
+	case "c":
+		if len(servers) > 0 {
+			clone := servers[m.cursor]
+			clone.ID = ""
+			clone.Name = clone.Name + " Copy"
+			m.previous = m.state
+			m.form = newServerForm("clone", clone)
+			m.form.originalID = servers[m.cursor].ID
+			m.state = app.StateServerForm
+			return m, textinput.Blink
+		}
 	case "d":
 		if len(servers) > 0 {
 			m.previous = m.state
@@ -495,6 +508,11 @@ func (m Model) handleServerListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleServerFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEsc:
+		if m.form.dirty() {
+			m.modalKind = modalServerFormDiscard
+			m.state = app.StateConfirmModal
+			return m, nil
+		}
 		m.state = m.previous
 		return m, nil
 	case "tab", keyDown:
@@ -503,15 +521,38 @@ func (m Model) handleServerFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "shift+tab", keyUp:
 		m.form.focusPrev()
 		return m, nil
+	case "left":
+		if m.form.index == serverFieldAuthType {
+			m.form.cycleAuthType(-1)
+			return m, nil
+		}
+	case "right", " ":
+		if m.form.index == serverFieldAuthType {
+			m.form.cycleAuthType(1)
+			return m, nil
+		}
 	case keyEnter:
-		if m.form.index < len(m.form.fields)-1 {
+		if m.form.index != m.form.lastVisibleIndex() {
 			m.form.focusNext()
 			return m, nil
 		}
 		return m.saveServerForm()
 	}
+	if m.form.index == serverFieldAuthType {
+		return m, nil
+	}
 	var cmd tea.Cmd
+	oldUser := m.form.fields[serverFieldUser].Value()
 	m.form.fields[m.form.index], cmd = m.form.fields[m.form.index].Update(msg)
+	if m.form.index == serverFieldUser {
+		if m.form.fields[serverFieldDefaultRemotePath].Value() == defaultRemotePathForUser(oldUser) {
+			m.form.remotePathManual = false
+		}
+		m.form.setUser(m.form.fields[serverFieldUser].Value())
+	}
+	if m.form.index == serverFieldDefaultRemotePath {
+		m.form.remotePathManual = true
+	}
 	return m, cmd
 }
 
@@ -523,6 +564,9 @@ func (m Model) saveServerForm() (tea.Model, tea.Cmd) {
 	}
 	srv := formValue.Server
 	original, hasOriginal := findServerByID(m.config.Servers, m.form.originalID)
+	if m.form.mode == "edit" {
+		srv.ID = m.form.originalID
+	}
 	if srv.ID == "" {
 		srv.ID = uniqueServerID(m.config.Servers, srv)
 	}
@@ -535,26 +579,51 @@ func (m Model) saveServerForm() (tea.Model, tea.Cmd) {
 	if m.form.mode == "edit" && hasOriginal {
 		srv.CreatedAt = original.CreatedAt
 	}
-	if srv.AuthType == config.AuthPassword && srv.PasswordRef == "" {
-		srv.PasswordRef = config.PasswordRef(srv.ID)
-	}
-	if formValue.Password != "" {
-		if srv.PasswordRef == "" {
+	switch srv.AuthType {
+	case config.AuthPassword:
+		srv.KeyPath = ""
+		oldRef := srv.PasswordRef
+		if m.form.mode == "edit" && oldRef != "" {
+			srv.PasswordRef = oldRef
+		} else {
 			srv.PasswordRef = config.PasswordRef(srv.ID)
 		}
-		if err := m.secrets.Set(srv.PasswordRef, formValue.Password); err != nil {
-			m.err = fmt.Sprintf("store password in keyring: %v", err)
-			return m, nil
+		if formValue.Password != "" {
+			if err := m.secrets.Set(srv.PasswordRef, formValue.Password); err != nil {
+				m.err = fmt.Sprintf("store password in secret store: %v", err)
+				return m, nil
+			}
+		} else if m.form.mode == "clone" && oldRef != "" {
+			if err := m.copySecret(oldRef, srv.PasswordRef, "password"); err != nil {
+				m.err = err.Error()
+				return m, nil
+			}
 		}
-	}
-	if formValue.Passphrase != "" {
-		if srv.PassphraseRef == "" {
+		srv.PassphraseRef = ""
+	case config.AuthKey:
+		srv.PasswordRef = ""
+		oldRef := srv.PassphraseRef
+		if formValue.Passphrase != "" {
+			if m.form.mode == "edit" && oldRef != "" {
+				srv.PassphraseRef = oldRef
+			} else {
+				srv.PassphraseRef = config.PassphraseRef(srv.ID)
+			}
+			if err := m.secrets.Set(srv.PassphraseRef, formValue.Passphrase); err != nil {
+				m.err = fmt.Sprintf("store passphrase in secret store: %v", err)
+				return m, nil
+			}
+		} else if m.form.mode == "clone" && oldRef != "" {
 			srv.PassphraseRef = config.PassphraseRef(srv.ID)
+			if err := m.copySecret(oldRef, srv.PassphraseRef, "passphrase"); err != nil {
+				m.err = err.Error()
+				return m, nil
+			}
 		}
-		if err := m.secrets.Set(srv.PassphraseRef, formValue.Passphrase); err != nil {
-			m.err = fmt.Sprintf("store passphrase in keyring: %v", err)
-			return m, nil
-		}
+	case config.AuthAgent:
+		srv.KeyPath = ""
+		srv.PasswordRef = ""
+		srv.PassphraseRef = ""
 	}
 	if m.form.mode == "edit" && m.form.originalID != srv.ID {
 		if err := m.store.DeleteServer(m.form.originalID); err != nil {
@@ -584,6 +653,20 @@ func (m Model) saveServerForm() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) copySecret(fromRef, toRef, label string) error {
+	if fromRef == "" || toRef == "" || fromRef == toRef {
+		return nil
+	}
+	value, err := m.secrets.Get(fromRef)
+	if err != nil {
+		return fmt.Errorf("copy %s in secret store: %v", label, err)
+	}
+	if err := m.secrets.Set(toRef, value); err != nil {
+		return fmt.Errorf("store cloned %s in secret store: %v", label, err)
+	}
+	return nil
+}
+
 func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.modalKind == modalHostKey {
 		return m.handleHostKeyConfirmKey(msg)
@@ -596,6 +679,9 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.modalKind == modalTaskCancel {
 		return m.handleTaskCancelConfirmKey(msg)
+	}
+	if m.modalKind == modalServerFormDiscard {
+		return m.handleServerFormDiscardConfirmKey(msg)
 	}
 	switch msg.String() {
 	case keyEsc, "n", "N":
@@ -618,6 +704,19 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.deleteID = ""
 		m.deleteName = ""
 		m.state = m.previous
+	}
+	return m, nil
+}
+
+func (m Model) handleServerFormDiscardConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEsc, "n", "N":
+		m.modalKind = ""
+		m.state = app.StateServerForm
+	case keyEnter, "y", "Y":
+		m.modalKind = ""
+		m.state = m.previous
+		m.status = "Server form changes discarded."
 	}
 	return m, nil
 }

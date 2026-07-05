@@ -89,6 +89,35 @@ func TestServerFilter(t *testing.T) {
 	}
 }
 
+func TestServerListArrowKeysUseExpectedDirection(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Servers = []config.Server{
+		{ID: "one", Name: "One", Host: "10.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent},
+		{ID: "two", Name: "Two", Host: "10.0.0.2", Port: 22, User: "root", AuthType: config.AuthAgent},
+	}
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.cursor != 1 {
+		t.Fatalf("cursor after j = %d, want 1", m.cursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	if m.cursor != 0 {
+		t.Fatalf("cursor after down = %d, want 0", m.cursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(Model)
+	if m.cursor != 1 {
+		t.Fatalf("cursor after up = %d, want 1", m.cursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	if m.cursor != 0 {
+		t.Fatalf("cursor after k = %d, want 0", m.cursor)
+	}
+}
+
 func TestServerListUsesBorderedPanel(t *testing.T) {
 	cfg := config.DefaultFile()
 	cfg.Servers = []config.Server{{ID: "dev", Name: "Dev", Env: "dev", Host: "127.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent}}
@@ -100,6 +129,92 @@ func TestServerListUsesBorderedPanel(t *testing.T) {
 	}
 }
 
+func TestServerListGroupsByTagWithDefaultFallback(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Servers = []config.Server{
+		{ID: "prod-web", Name: "Prod Web", Env: "prod", Host: "10.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent, Tags: []string{"web", "prod"}},
+		{ID: "untagged", Name: "Untagged", Env: "dev", Host: "10.0.0.2", Port: 22, User: "deploy", AuthType: config.AuthAgent},
+	}
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
+	m.width = 100
+	got := m.viewServerList()
+	for _, want := range []string{"[prod]", "[web]", "[default]", "Prod Web [prod] root@10.0.0.1:22", "Untagged [dev] deploy@10.0.0.2:22"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("server list missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestServerCloneCreatesNewIDAndCopiesSecret(t *testing.T) {
+	store := config.NewStore(t.TempDir())
+	cfg := config.DefaultFile()
+	cfg.Servers = []config.Server{{
+		ID:          "prod-db",
+		Name:        "Prod DB",
+		Env:         "prod",
+		Host:        "10.0.0.20",
+		Port:        22,
+		User:        "root",
+		AuthType:    config.AuthPassword,
+		PasswordRef: config.PasswordRef("prod-db"),
+		Tags:        []string{"db"},
+	}}
+	if err := store.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(app.StateServerList, store, cfg)
+	secrets := fakeSecrets{values: map[string]string{config.PasswordRef("prod-db"): "secret-password"}}
+	m.secrets = secrets
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = updated.(Model)
+	if m.state != app.StateServerForm {
+		t.Fatalf("state after clone = %s, want server form", m.state)
+	}
+	if got := m.form.fields[serverFieldName].Value(); got != "Prod DB Copy" {
+		t.Fatalf("clone name = %q", got)
+	}
+	updated, _ = m.saveServerForm()
+	m = updated.(Model)
+	if len(m.config.Servers) != 2 {
+		t.Fatalf("servers after clone = %d, want 2", len(m.config.Servers))
+	}
+	clone := m.config.Servers[1]
+	if clone.ID == "prod-db" || clone.ID == "" {
+		t.Fatalf("clone id = %q", clone.ID)
+	}
+	if clone.PasswordRef != config.PasswordRef(clone.ID) {
+		t.Fatalf("clone passwordRef = %q", clone.PasswordRef)
+	}
+	if got := secrets.values[clone.PasswordRef]; got != "secret-password" {
+		t.Fatalf("cloned password = %q", got)
+	}
+}
+
+func TestServerFormEscPromptsWhenDirty(t *testing.T) {
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.form = newServerForm("add", config.Server{Port: 22, AuthType: config.AuthAgent})
+	m.state = app.StateServerForm
+	m.previous = app.StateServerList
+	m.form.fields[serverFieldName].SetValue("Changed")
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.state != app.StateConfirmModal || m.modalKind != modalServerFormDiscard {
+		t.Fatalf("state=%s modal=%s, want discard confirm", m.state, m.modalKind)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.state != app.StateServerForm || m.modalKind != "" {
+		t.Fatalf("state after cancel discard=%s modal=%s, want server form", m.state, m.modalKind)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.state != app.StateServerList || m.modalKind != "" {
+		t.Fatalf("state after discard=%s modal=%s, want server list", m.state, m.modalKind)
+	}
+}
+
 func TestPasswordServerStoresSecretRef(t *testing.T) {
 	store := config.NewStore(t.TempDir())
 	m := NewModel(app.StateServerList, store, config.DefaultFile())
@@ -107,7 +222,6 @@ func TestPasswordServerStoresSecretRef(t *testing.T) {
 	m.secrets = secrets
 	m.form = newServerForm("add", config.Server{Port: 22, AuthType: config.AuthPassword})
 	setServerFormValues(&m, map[int]string{
-		serverFieldID:             "prod-db",
 		serverFieldName:           "Prod DB",
 		serverFieldEnv:            "prod",
 		serverFieldHost:           "10.0.0.20",
@@ -127,6 +241,69 @@ func TestPasswordServerStoresSecretRef(t *testing.T) {
 	}
 	if got := secrets.values[srv.PasswordRef]; got != "secret-password" {
 		t.Fatalf("stored password = %q", got)
+	}
+}
+
+func TestServerFormHidesIDAndSecretRefs(t *testing.T) {
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.form = newServerForm("add", config.Server{Port: 22, AuthType: config.AuthAgent})
+	view := m.viewServerForm()
+	if strings.Contains(view, "ID:") || strings.Contains(view, "Password Ref") || strings.Contains(view, "Passphrase Ref") {
+		t.Fatalf("server form should hide generated id and secret refs: %q", view)
+	}
+	if strings.Contains(view, "Password:") || strings.Contains(view, "Passphrase:") || strings.Contains(view, "Key Path:") {
+		t.Fatalf("agent auth should hide password, passphrase, and key path: %q", view)
+	}
+	m.form.cycleAuthType(1)
+	view = m.viewServerForm()
+	if !strings.Contains(view, "Key Path:") || !strings.Contains(view, "Passphrase:") || strings.Contains(view, "Password:") {
+		t.Fatalf("key auth should show key path and passphrase only: %q", view)
+	}
+	m.form.cycleAuthType(1)
+	view = m.viewServerForm()
+	if !strings.Contains(view, "Password:") || strings.Contains(view, "Passphrase:") || strings.Contains(view, "Key Path:") {
+		t.Fatalf("password auth should show password only: %q", view)
+	}
+}
+
+func TestServerFormUserUpdatesDefaultRemotePath(t *testing.T) {
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.form = newServerForm("add", config.Server{Port: 22, AuthType: config.AuthAgent})
+	m.form.setUser("root")
+	if got := m.form.fields[serverFieldDefaultRemotePath].Value(); got != "/root" {
+		t.Fatalf("root default remote path = %q", got)
+	}
+	m.form.setUser("deploy")
+	if got := m.form.fields[serverFieldDefaultRemotePath].Value(); got != "/home/deploy" {
+		t.Fatalf("deploy default remote path = %q", got)
+	}
+	m.form.fields[serverFieldDefaultRemotePath].SetValue("/srv/app")
+	m.form.remotePathManual = true
+	m.form.setUser("ubuntu")
+	if got := m.form.fields[serverFieldDefaultRemotePath].Value(); got != "/srv/app" {
+		t.Fatalf("manual default remote path should be preserved, got %q", got)
+	}
+}
+
+func TestKeyServerWithoutPassphraseDoesNotCreatePassphraseRef(t *testing.T) {
+	store := config.NewStore(t.TempDir())
+	m := NewModel(app.StateServerList, store, config.DefaultFile())
+	m.form = newServerForm("add", config.Server{Port: 22, AuthType: config.AuthKey})
+	setServerFormValues(&m, map[int]string{
+		serverFieldName:     "Key Host",
+		serverFieldHost:     "10.0.0.30",
+		serverFieldPort:     "22",
+		serverFieldUser:     "deploy",
+		serverFieldAuthType: config.AuthKey,
+		serverFieldKeyPath:  "/tmp/id_rsa",
+	})
+	updated, _ := m.saveServerForm()
+	m = updated.(Model)
+	if len(m.config.Servers) != 1 {
+		t.Fatalf("servers = %d, want 1", len(m.config.Servers))
+	}
+	if got := m.config.Servers[0].PassphraseRef; got != "" {
+		t.Fatalf("passphraseRef = %q, want empty", got)
 	}
 }
 

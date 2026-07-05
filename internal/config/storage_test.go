@@ -82,3 +82,24 @@ func TestKeyringRefs(t *testing.T) {
 		t.Fatalf("unexpected passphrase ref")
 	}
 }
+
+func TestFileSecretStoreStoresPrivateFallbackFile(t *testing.T) {
+	store := FileSecretStore{Path: filepath.Join(t.TempDir(), "secrets.json")}
+	if err := store.Set("ref", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get("ref")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "secret" {
+		t.Fatalf("secret = %q", got)
+	}
+	info, err := os.Stat(store.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("fallback secret file mode = %v, want 0600", got)
+	}
+}

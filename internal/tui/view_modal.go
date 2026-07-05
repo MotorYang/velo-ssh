@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	modalDelete     = "delete"
-	modalHostKey    = "host_key"
-	modalOverwrite  = "overwrite"
-	modalFileDelete = "file_delete"
-	modalTaskCancel = "task_cancel"
+	modalDelete            = "delete"
+	modalHostKey           = "host_key"
+	modalOverwrite         = "overwrite"
+	modalFileDelete        = "file_delete"
+	modalTaskCancel        = "task_cancel"
+	modalServerFormDiscard = "server_form_discard"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -107,6 +108,14 @@ func (m Model) viewTaskCancelConfirm() string {
 	return m.viewModal(message)
 }
 
+func (m Model) viewServerFormDiscardConfirm() string {
+	return m.viewModal(
+		"Discard unsaved server changes?\n\n" +
+			"You have edited fields in this server form. Leaving now will lose those changes.\n\n" +
+			"[Enter]/[y] Discard Changes | [Esc]/[n] Keep Editing",
+	)
+}
+
 func (m Model) viewConfirmModal() string {
 	if m.modalKind == modalHostKey {
 		return m.viewHostKeyConfirm()
@@ -119,6 +128,9 @@ func (m Model) viewConfirmModal() string {
 	}
 	if m.modalKind == modalTaskCancel {
 		return m.viewTaskCancelConfirm()
+	}
+	if m.modalKind == modalServerFormDiscard {
+		return m.viewServerFormDiscardConfirm()
 	}
 	return m.viewDeleteConfirm()
 }
