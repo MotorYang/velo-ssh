@@ -571,6 +571,16 @@ func TestTaskCenterPauseAndResume(t *testing.T) {
 	}
 }
 
+func TestShutdownCancelsActiveTransferTasks(t *testing.T) {
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), config.DefaultFile())
+	task := transfer.NewTask("task-a", transfer.Upload, "/local/a", "/remote/a")
+	m.tasks.Add(task)
+	m.shutdown()
+	if got := task.Snapshot().Status; got != transfer.TaskCanceled {
+		t.Fatalf("task status = %s, want canceled", got)
+	}
+}
+
 func TestOverwritePromptConfirmStartsTransferCommand(t *testing.T) {
 	m := NewModel(app.StateConfirmModal, config.NewStore(t.TempDir()), config.DefaultFile())
 	m.previous = app.StateFileManager

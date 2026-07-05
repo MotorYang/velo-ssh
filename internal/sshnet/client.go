@@ -101,6 +101,12 @@ func (c *Client) OpenSFTP(ctx context.Context) (*sftp.Client, error) {
 	}()
 	select {
 	case <-ctx.Done():
+		go func() {
+			res := <-ch
+			if res.c != nil {
+				_ = res.c.Close()
+			}
+		}()
 		return nil, ctx.Err()
 	case res := <-ch:
 		if res.err != nil {

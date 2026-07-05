@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -72,6 +73,35 @@ func TestTaskWaitIfPausedBlocksUntilResume(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("WaitIfPaused did not return after resume")
+	}
+}
+
+func TestManagerCancelAllAndActiveCount(t *testing.T) {
+	manager := NewManager()
+	first := NewTask("1", Upload, "a", "b")
+	second := NewTask("2", Download, "c", "d")
+	manager.Add(first)
+	manager.Add(second)
+	if got := manager.ActiveCount(); got != 2 {
+		t.Fatalf("active count = %d, want 2", got)
+	}
+	if canceled := manager.CancelAll(); canceled != 2 {
+		t.Fatalf("canceled = %d, want 2", canceled)
+	}
+	if got := manager.ActiveCount(); got != 0 {
+		t.Fatalf("active count after cancel = %d, want 0", got)
+	}
+	if first.Snapshot().Status != TaskCanceled || second.Snapshot().Status != TaskCanceled {
+		t.Fatalf("tasks were not canceled: %s %s", first.Snapshot().Status, second.Snapshot().Status)
+	}
+}
+
+func TestManagerWaitReturnsWithoutRunningTasks(t *testing.T) {
+	manager := NewManager()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := manager.Wait(ctx); err != nil {
+		t.Fatalf("wait returned error: %v", err)
 	}
 }
 

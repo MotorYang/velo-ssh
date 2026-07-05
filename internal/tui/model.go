@@ -223,19 +223,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.state = app.StateServerList
 		case "quit":
-			if m.ssh != nil {
-				_ = m.ssh.Close()
-				m.ssh = nil
-			}
+			m.shutdown()
 			m.state = app.StateServerList
 		default:
 			m.state = app.StateServerList
 		}
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" || (m.state == app.StateServerList && msg.String() == "q") {
-			if m.ssh != nil {
-				_ = m.ssh.Close()
-			}
+			m.shutdown()
 			return m, tea.Quit
 		}
 		m.err = ""
@@ -960,6 +955,10 @@ func (m Model) runShellCmd() tea.Cmd {
 
 func (m Model) reconnectCmd() tea.Cmd {
 	return func() tea.Msg {
+		m.tasks.CancelAll()
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = m.tasks.Wait(waitCtx)
+		waitCancel()
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := m.ssh.Reconnect(ctx); err != nil {
@@ -970,6 +969,19 @@ func (m Model) reconnectCmd() tea.Cmd {
 			return errMsg{err}
 		}
 		return shellConnectedMsg{client: m.ssh, server: m.activeServer}
+	}
+}
+
+func (m *Model) shutdown() {
+	if m.tasks != nil {
+		m.tasks.CancelAll()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = m.tasks.Wait(ctx)
+		cancel()
+	}
+	if m.ssh != nil {
+		_ = m.ssh.Close()
+		m.ssh = nil
 	}
 }
 

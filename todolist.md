@@ -156,14 +156,14 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 ## Lifecycle And Reliability
 
 - [x] Audit goroutine lifecycle for shell sessions.
-- [ ] Audit goroutine lifecycle for SFTP clients.
+- [x] Audit goroutine lifecycle for SFTP clients.
 - [x] Audit goroutine lifecycle for KeepAlive.
-- [ ] Audit goroutine lifecycle for transfer tasks.
+- [x] Audit goroutine lifecycle for transfer tasks.
 - [x] Ensure disconnect cancels active shell resources.
-- [ ] Ensure app quit cancels active transfer resources or reports continuing background tasks.
+- [x] Ensure app quit cancels active transfer resources or reports continuing background tasks.
 - [x] Ensure reconnect does not leak old sessions.
 - [x] Add race tests for shell and KeepAlive lifecycle.
-- [ ] Add race tests for transfer progress updates.
+- [x] Add race tests for transfer progress updates.
 
 ## Integration Tests
 

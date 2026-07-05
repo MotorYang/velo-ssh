@@ -14,6 +14,7 @@ type Manager struct {
 	jobs        map[string]*job
 	concurrency int
 	running     int
+	wg          sync.WaitGroup
 }
 
 type job struct {
@@ -63,6 +64,50 @@ func (m *Manager) Cancel(id string) error {
 	task.Cancel()
 	m.schedule()
 	return nil
+}
+
+func (m *Manager) CancelAll() int {
+	m.mu.Lock()
+	tasks := make([]*Task, 0, len(m.tasks))
+	for _, task := range m.tasks {
+		snapshot := task.Snapshot()
+		if snapshot.Status == TaskQueued || snapshot.Status == TaskRunning || snapshot.Status == TaskPaused {
+			tasks = append(tasks, task)
+		}
+	}
+	m.mu.Unlock()
+	for _, task := range tasks {
+		task.Cancel()
+	}
+	m.schedule()
+	return len(tasks)
+}
+
+func (m *Manager) ActiveCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	active := 0
+	for _, task := range m.tasks {
+		snapshot := task.Snapshot()
+		if snapshot.Status == TaskQueued || snapshot.Status == TaskRunning || snapshot.Status == TaskPaused {
+			active++
+		}
+	}
+	return active
+}
+
+func (m *Manager) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return nil
+	}
 }
 
 func (m *Manager) Pause(id string) error {
@@ -116,6 +161,7 @@ func (m *Manager) schedule() {
 		}
 		next.task.mark(TaskRunning, nil)
 		m.running++
+		m.wg.Add(1)
 		ready = append(ready, next)
 	}
 	m.mu.Unlock()
@@ -125,6 +171,7 @@ func (m *Manager) schedule() {
 }
 
 func (m *Manager) run(job *job) {
+	defer m.wg.Done()
 	progress := func(done, total int64) {
 		job.task.SetProgress(done, total)
 	}
