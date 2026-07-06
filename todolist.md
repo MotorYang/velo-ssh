@@ -206,10 +206,6 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Test KeepAlive stops after client close.
 - [x] Test resize triggers PTY `WindowChange`.
 
-## v1.1 Or Later
-
-- [ ] Implement rich theme marketplace.
-
 ## Current Verification Commands
 
 ```bash
