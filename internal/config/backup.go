@@ -1,11 +1,18 @@
 package config
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/crypto/scrypt"
 )
 
 const BackupVersion = 1
@@ -18,7 +25,29 @@ type BackupFile struct {
 	SecretNote string            `json:"secretNote,omitempty"`
 }
 
+type EncryptedBackupFile struct {
+	Version    int              `json:"version"`
+	CreatedAt  time.Time        `json:"createdAt"`
+	Encryption BackupEncryption `json:"encryption"`
+	Payload    string           `json:"payload"`
+}
+
+type BackupEncryption struct {
+	Algorithm string `json:"algorithm"`
+	KDF       string `json:"kdf"`
+	Salt      string `json:"salt"`
+	Nonce     string `json:"nonce"`
+	N         int    `json:"n"`
+	R         int    `json:"r"`
+	P         int    `json:"p"`
+	KeyLen    int    `json:"keyLen"`
+}
+
 func ExportBackup(store *Store, secrets SecretStore, outputPath string, includeSecrets bool) error {
+	return ExportBackupWithPassphrase(store, secrets, outputPath, includeSecrets, "")
+}
+
+func ExportBackupWithPassphrase(store *Store, secrets SecretStore, outputPath string, includeSecrets bool, passphrase string) error {
 	if outputPath == "" {
 		return fmt.Errorf("export backup: output path is required")
 	}
@@ -32,7 +61,9 @@ func ExportBackup(store *Store, secrets SecretStore, outputPath string, includeS
 		Config:    cfg,
 	}
 	if includeSecrets {
-		backup.SecretNote = "Secret values are stored in plaintext in this backup file. Protect or delete this file after import."
+		if passphrase == "" {
+			backup.SecretNote = "Secret values are stored in plaintext in this backup file. Protect or delete this file after import."
+		}
 		backup.Secrets = map[string]string{}
 		for _, ref := range secretRefs(cfg) {
 			value, err := secrets.Get(ref)
@@ -42,10 +73,21 @@ func ExportBackup(store *Store, secrets SecretStore, outputPath string, includeS
 			backup.Secrets[ref] = value
 		}
 	}
+	if passphrase != "" {
+		encrypted, err := encryptBackup(backup, passphrase)
+		if err != nil {
+			return err
+		}
+		return writeBackupAtomic(outputPath, encrypted)
+	}
 	return writeBackupAtomic(outputPath, backup)
 }
 
 func ImportBackup(store *Store, secrets SecretStore, inputPath string) error {
+	return ImportBackupWithPassphrase(store, secrets, inputPath, "")
+}
+
+func ImportBackupWithPassphrase(store *Store, secrets SecretStore, inputPath string, passphrase string) error {
 	if inputPath == "" {
 		return fmt.Errorf("import backup: input path is required")
 	}
@@ -53,8 +95,8 @@ func ImportBackup(store *Store, secrets SecretStore, inputPath string) error {
 	if err != nil {
 		return fmt.Errorf("import backup: read %s: %w", inputPath, err)
 	}
-	var backup BackupFile
-	if err := json.Unmarshal(data, &backup); err != nil {
+	backup, err := decodeBackup(data, passphrase)
+	if err != nil {
 		return fmt.Errorf("import backup: parse %s: %w", inputPath, err)
 	}
 	if backup.Version == 0 {
@@ -77,6 +119,21 @@ func ImportBackup(store *Store, secrets SecretStore, inputPath string) error {
 	return nil
 }
 
+func decodeBackup(data []byte, passphrase string) (BackupFile, error) {
+	var encrypted EncryptedBackupFile
+	if err := json.Unmarshal(data, &encrypted); err == nil && encrypted.Encryption.Algorithm != "" {
+		if passphrase == "" {
+			return BackupFile{}, fmt.Errorf("backup is encrypted; passphrase is required")
+		}
+		return decryptBackup(encrypted, passphrase)
+	}
+	var backup BackupFile
+	if err := json.Unmarshal(data, &backup); err != nil {
+		return BackupFile{}, err
+	}
+	return backup, nil
+}
+
 func secretRefs(cfg File) []string {
 	seen := map[string]bool{}
 	var refs []string
@@ -90,6 +147,93 @@ func secretRefs(cfg File) []string {
 		}
 	}
 	return refs
+}
+
+func encryptBackup(backup BackupFile, passphrase string) (EncryptedBackupFile, error) {
+	plain, err := json.Marshal(backup)
+	if err != nil {
+		return EncryptedBackupFile{}, err
+	}
+	salt := make([]byte, 16)
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return EncryptedBackupFile{}, err
+	}
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return EncryptedBackupFile{}, err
+	}
+	const n, r, p, keyLen = 32768, 8, 1, 32
+	key, err := scrypt.Key([]byte(passphrase), salt, n, r, p, keyLen)
+	if err != nil {
+		return EncryptedBackupFile{}, err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return EncryptedBackupFile{}, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return EncryptedBackupFile{}, err
+	}
+	ciphertext := aead.Seal(nil, nonce, plain, nil)
+	return EncryptedBackupFile{
+		Version:   BackupVersion,
+		CreatedAt: time.Now().UTC(),
+		Encryption: BackupEncryption{
+			Algorithm: "AES-256-GCM",
+			KDF:       "scrypt",
+			Salt:      base64.StdEncoding.EncodeToString(salt),
+			Nonce:     base64.StdEncoding.EncodeToString(nonce),
+			N:         n,
+			R:         r,
+			P:         p,
+			KeyLen:    keyLen,
+		},
+		Payload: base64.StdEncoding.EncodeToString(ciphertext),
+	}, nil
+}
+
+func decryptBackup(encrypted EncryptedBackupFile, passphrase string) (BackupFile, error) {
+	if encrypted.Encryption.Algorithm != "AES-256-GCM" || encrypted.Encryption.KDF != "scrypt" {
+		return BackupFile{}, fmt.Errorf("unsupported backup encryption %s/%s", encrypted.Encryption.Algorithm, encrypted.Encryption.KDF)
+	}
+	salt, err := base64.StdEncoding.DecodeString(encrypted.Encryption.Salt)
+	if err != nil {
+		return BackupFile{}, err
+	}
+	nonce, err := base64.StdEncoding.DecodeString(encrypted.Encryption.Nonce)
+	if err != nil {
+		return BackupFile{}, err
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(encrypted.Payload)
+	if err != nil {
+		return BackupFile{}, err
+	}
+	keyLen := encrypted.Encryption.KeyLen
+	if keyLen == 0 {
+		keyLen = 32
+	}
+	key, err := scrypt.Key([]byte(passphrase), salt, encrypted.Encryption.N, encrypted.Encryption.R, encrypted.Encryption.P, keyLen)
+	if err != nil {
+		return BackupFile{}, err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return BackupFile{}, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return BackupFile{}, err
+	}
+	plain, err := aead.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return BackupFile{}, fmt.Errorf("decrypt backup: %w", err)
+	}
+	var backup BackupFile
+	if err := json.Unmarshal(plain, &backup); err != nil {
+		return BackupFile{}, err
+	}
+	return backup, nil
 }
 
 func BackupPath(path string) string {

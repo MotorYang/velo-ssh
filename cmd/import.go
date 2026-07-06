@@ -11,13 +11,17 @@ var importCmd = &cobra.Command{
 	Short: "Import server configuration",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		passphrase, err := cmd.Flags().GetString("passphrase")
+		if err != nil {
+			return err
+		}
 		dir, err := config.DefaultDir()
 		if err != nil {
 			return err
 		}
 		store := config.NewStore(dir)
 		secrets := config.NewSecretStore(store.SecretsPath())
-		if err := config.ImportBackup(store, secrets, args[0]); err != nil {
+		if err := config.ImportBackupWithPassphrase(store, secrets, args[0], passphrase); err != nil {
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Imported VeloSSH backup from %s\n", config.BackupPath(args[0]))
@@ -26,5 +30,6 @@ var importCmd = &cobra.Command{
 }
 
 func init() {
+	importCmd.Flags().String("passphrase", "", "backup decryption passphrase")
 	rootCmd.AddCommand(importCmd)
 }

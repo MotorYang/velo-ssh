@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +94,53 @@ func TestExportImportBackupWithSecrets(t *testing.T) {
 	}
 	if secret != "secret" {
 		t.Fatalf("imported secret = %q", secret)
+	}
+}
+
+func TestEncryptedBackupRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	source := NewStore(filepath.Join(dir, "source"))
+	sourceSecrets := FileSecretStore{Path: filepath.Join(dir, "source-secrets.json")}
+	cfg := DefaultFile()
+	cfg.Servers = []Server{{
+		ID:          "prod",
+		Name:        "Prod",
+		Host:        "example.com",
+		Port:        22,
+		User:        "root",
+		AuthType:    AuthPassword,
+		PasswordRef: PasswordRef("prod"),
+	}}
+	if err := source.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := sourceSecrets.Set(PasswordRef("prod"), "secret"); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(dir, "encrypted.json")
+	if err := ExportBackupWithPassphrase(source, sourceSecrets, output, true, "pass"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret") {
+		t.Fatalf("encrypted backup leaked secret: %s", data)
+	}
+	target := NewStore(filepath.Join(dir, "target"))
+	targetSecrets := FileSecretStore{Path: filepath.Join(dir, "target-secrets.json")}
+	if err := ImportBackupWithPassphrase(target, targetSecrets, output, "wrong"); err == nil {
+		t.Fatal("expected wrong passphrase to fail")
+	}
+	if err := ImportBackupWithPassphrase(target, targetSecrets, output, "pass"); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := targetSecrets.Get(PasswordRef("prod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret != "secret" {
+		t.Fatalf("secret = %q", secret)
 	}
 }

@@ -19,3 +19,4 @@
 - Added remote file edit flow with local drafts and automatic failed-upload retry records.
 - Added asynchronous server list online checks with latency display.
 - Added default `.vsshignore` exclusions for `.DS_Store`, `Thumbs.db`, and `.git/`.
+- Added AES-256-GCM encrypted backup export/import with passphrase support.
