@@ -18,3 +18,4 @@
 - Fixed multipart resume to reuse a stable remote temporary file path across retries.
 - Added remote file edit flow with local drafts and automatic failed-upload retry records.
 - Added asynchronous server list online checks with latency display.
+- Added default `.vsshignore` exclusions for `.DS_Store`, `Thumbs.db`, and `.git/`.

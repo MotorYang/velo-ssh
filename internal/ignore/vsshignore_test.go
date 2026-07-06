@@ -29,3 +29,19 @@ func TestMatcherIgnoresGlobDirectoryAndNegation(t *testing.T) {
 		}
 	}
 }
+
+func TestMatcherUsesDefaultIgnoreRules(t *testing.T) {
+	m := New(nil)
+	for _, rel := range []string{".DS_Store", "nested/Thumbs.db", ".git/config"} {
+		if !m.Ignored(rel, false) {
+			t.Fatalf("expected default ignore for %q", rel)
+		}
+	}
+}
+
+func TestUserRulesCanNegateDefaultIgnore(t *testing.T) {
+	m := New([]string{"!.git/"})
+	if m.Ignored(".git/config", false) {
+		t.Fatal("expected user negation to include .git/config")
+	}
+}

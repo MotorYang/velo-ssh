@@ -20,15 +20,15 @@ type pattern struct {
 }
 
 func LoadFile(filePath string) (Matcher, error) {
+	patterns := defaultPatterns()
 	file, err := os.Open(filePath)
 	if os.IsNotExist(err) {
-		return Matcher{}, nil
+		return Matcher{patterns: patterns}, nil
 	}
 	if err != nil {
 		return Matcher{}, err
 	}
 	defer file.Close()
-	var patterns []pattern
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		if pat, ok := parseLine(scanner.Text()); ok {
@@ -42,13 +42,24 @@ func LoadFile(filePath string) (Matcher, error) {
 }
 
 func New(lines []string) Matcher {
-	var patterns []pattern
+	patterns := defaultPatterns()
 	for _, line := range lines {
 		if pat, ok := parseLine(line); ok {
 			patterns = append(patterns, pat)
 		}
 	}
 	return Matcher{patterns: patterns}
+}
+
+func defaultPatterns() []pattern {
+	defaults := []string{".DS_Store", "Thumbs.db", ".git/"}
+	patterns := make([]pattern, 0, len(defaults))
+	for _, line := range defaults {
+		if pat, ok := parseLine(line); ok {
+			patterns = append(patterns, pat)
+		}
+	}
+	return patterns
 }
 
 func (m Matcher) Empty() bool {
