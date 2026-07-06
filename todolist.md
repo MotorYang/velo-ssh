@@ -80,6 +80,18 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Support skipping a specific update version.
 - [x] Download and install matching release assets automatically.
 - [x] Show update download/install progress in a modal.
+- [x] Add GitHub Actions release workflow for prod branch platform artifacts.
+- [x] Generate release notes from `CHANGELOG.md`.
+- [x] Add language setting with English and Simplified Chinese options.
+- [x] Localize manager, settings, forms, modals, file manager, task center, and `:vssh help`.
+- [x] Return to server list when a remote SSH shell exits with `exit`.
+- [x] Generate server IDs automatically in the server form.
+- [x] Use option controls for auth type and related form settings.
+- [x] Store password and passphrase values in the secret store instead of config JSON.
+- [x] Group server list entries by tag, with untagged servers under `default`.
+- [x] Show environment labels in the server list.
+- [x] Support cloning servers from the manager.
+- [x] Warn before leaving dirty server forms.
 
 ## High Priority
 
