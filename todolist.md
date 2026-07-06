@@ -74,6 +74,12 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Add unit tests for transfer task state.
 - [x] Add unit tests for file manager layout and selection.
 - [x] Add unit tests for task center interaction.
+- [x] Display current VeloSSH version in the server manager.
+- [x] Check GitHub Releases for newer versions.
+- [x] Support disabling update checks in settings.
+- [x] Support skipping a specific update version.
+- [x] Download and install matching release assets automatically.
+- [x] Show update download/install progress in a modal.
 
 ## High Priority
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/motoryang/velo-ssh/internal/term"
@@ -15,6 +16,7 @@ const (
 	modalTaskCancel        = "task_cancel"
 	modalServerFormDiscard = "server_form_discard"
 	modalUpdateAvailable   = "update_available"
+	modalUpdateInstalling  = "update_installing"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -126,7 +128,36 @@ func (m Model) viewUpdateAvailableConfirm() string {
 	)
 }
 
+func (m Model) viewUpdateInstalling() string {
+	progress := m.updateProgress
+	barWidth := 44
+	ratio := float64(0)
+	detail := m.tr(textUpdateProgressPreparing)
+	if progress.Stage != "" {
+		detail = updateStageLabel(progress.Stage, m.config.Settings.Language)
+	}
+	if progress.Total > 0 {
+		ratio = float64(progress.Downloaded) / float64(progress.Total)
+		if ratio < 0 {
+			ratio = 0
+		}
+		if ratio > 1 {
+			ratio = 1
+		}
+		detail = detail + " " + humanBytes(progress.Downloaded) + "/" + humanBytes(progress.Total)
+	}
+	return m.viewModal(
+		m.tr(textUpdateInstallingPrompt) + "\n\n" +
+			m.tr(textUpdateLatest) + ": " + m.pendingUpdate.Version + "\n" +
+			detail + "\n\n" +
+			renderProgressBar(barWidth, ratio),
+	)
+}
+
 func (m Model) viewConfirmModal() string {
+	if m.modalKind == modalUpdateInstalling {
+		return m.viewUpdateInstalling()
+	}
 	if m.modalKind == modalUpdateAvailable {
 		return m.viewUpdateAvailableConfirm()
 	}
@@ -146,4 +177,19 @@ func (m Model) viewConfirmModal() string {
 		return m.viewServerFormDiscardConfirm()
 	}
 	return m.viewDeleteConfirm()
+}
+
+func renderProgressBar(width int, ratio float64) string {
+	if width < 8 {
+		width = 8
+	}
+	filled := int(ratio * float64(width))
+	if filled > width {
+		filled = width
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	percent := int(ratio*100 + 0.5)
+	return "[" + strings.Repeat("=", filled) + strings.Repeat(" ", width-filled) + "] " + strconv.Itoa(percent) + "%"
 }

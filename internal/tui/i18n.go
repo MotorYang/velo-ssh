@@ -83,8 +83,10 @@ const (
 	textSkipUpdateAction        = "update.skip"
 	textUpdateCanceled          = "update.canceled"
 	textUpdateSkipped           = "update.skipped"
-	textUpdateOpenFailed        = "update.openFailed"
-	textUpdateOpenBrowser       = "update.openBrowser"
+	textUpdateInstallFailed     = "update.installFailed"
+	textUpdateInstalled         = "update.installed"
+	textUpdateInstallingPrompt  = "update.installing"
+	textUpdateProgressPreparing = "update.progress.preparing"
 	textFooterFileSearch        = "footer.file.search"
 	textFooterRename            = "footer.file.rename"
 	textFooterCreateDir         = "footer.file.createDir"
@@ -169,13 +171,15 @@ var zhText = map[string]string{
 	textUpdateAvailablePrompt:   "发现新版本",
 	textUpdateCurrent:           "当前版本",
 	textUpdateLatest:            "最新版本",
-	textUpdateBody:              "选择更新会打开 GitHub Release 页面。",
-	textUpdateAction:            "[Enter]/[u] 更新",
+	textUpdateBody:              "选择更新会自动下载并安装适用于当前平台的 Release 产物。",
+	textUpdateAction:            "[Enter]/[u] 下载并安装",
 	textSkipUpdateAction:        "[s] 跳过本次版本",
 	textUpdateCanceled:          "已取消本次更新。",
 	textUpdateSkipped:           "已跳过版本 %s。",
-	textUpdateOpenFailed:        "打开更新页面失败：%v",
-	textUpdateOpenBrowser:       "已打开更新页面：%s",
+	textUpdateInstallFailed:     "安装更新失败：%v",
+	textUpdateInstalled:         "版本 %s 已安装。请重启 VeloSSH 使用新版本。",
+	textUpdateInstallingPrompt:  "正在安装更新",
+	textUpdateProgressPreparing: "准备中",
 	textFooterFileSearch:        "[Enter] 应用文件搜索 | [Esc] 取消搜索",
 	textFooterRename:            "[Enter] 保存重命名 | [Esc] 取消重命名",
 	textFooterCreateDir:         "[Enter] 创建目录 | [Esc] 取消",
@@ -346,19 +350,23 @@ func enText(key string) string {
 	case textUpdateLatest:
 		return "Latest"
 	case textUpdateBody:
-		return "Choose update to open the GitHub Release page."
+		return "Choose update to download and install the matching Release asset for this platform."
 	case textUpdateAction:
-		return "[Enter]/[u] Update"
+		return "[Enter]/[u] Download and Install"
 	case textSkipUpdateAction:
 		return "[s] Skip this version"
 	case textUpdateCanceled:
 		return "Update canceled."
 	case textUpdateSkipped:
 		return "Skipped version %s."
-	case textUpdateOpenFailed:
-		return "Open update page failed: %v"
-	case textUpdateOpenBrowser:
-		return "Opened update page: %s"
+	case textUpdateInstallFailed:
+		return "Install update failed: %v"
+	case textUpdateInstalled:
+		return "Version %s installed. Restart VeloSSH to use the new version."
+	case textUpdateInstallingPrompt:
+		return "Installing update"
+	case textUpdateProgressPreparing:
+		return "Preparing"
 	case textFooterFileSearch:
 		return "[Enter] Apply File Search | [Esc] Cancel Search"
 	case textFooterRename:
@@ -373,6 +381,43 @@ func enText(key string) string {
 		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [R] Refresh | [t]/[q]/[Esc] Back"
 	default:
 		return key
+	}
+}
+
+func updateStageLabel(stage, language string) string {
+	if language == config.LanguageSimplifiedChinese {
+		switch stage {
+		case "selecting":
+			return "选择安装包"
+		case "downloading":
+			return "下载中"
+		case "extracting":
+			return "解压中"
+		case "installing":
+			return "安装中"
+		case "scheduled":
+			return "已安排替换，重启后生效"
+		case "installed":
+			return "安装完成"
+		default:
+			return "准备中"
+		}
+	}
+	switch stage {
+	case "selecting":
+		return "Selecting package"
+	case "downloading":
+		return "Downloading"
+	case "extracting":
+		return "Extracting"
+	case "installing":
+		return "Installing"
+	case "scheduled":
+		return "Replacement scheduled; restart to finish"
+	case "installed":
+		return "Installed"
+	default:
+		return "Preparing"
 	}
 }
 

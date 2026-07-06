@@ -299,6 +299,21 @@ func TestUpdateAvailablePromptCanSkipVersion(t *testing.T) {
 	}
 }
 
+func TestUpdateInstallingPromptShowsProgress(t *testing.T) {
+	store := config.NewStore(t.TempDir())
+	m := NewModel(app.StateServerList, store, config.DefaultFile())
+	m.state = app.StateConfirmModal
+	m.modalKind = modalUpdateInstalling
+	m.pendingUpdate = updater.Release{Version: "v1.0.0.26070602"}
+	m.updateProgress = updater.Progress{Stage: "downloading", Downloaded: 50, Total: 100}
+	got := m.viewConfirmModal()
+	for _, want := range []string{"Installing update", "Downloading", "50B/100B", "50%"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("installing prompt missing %q in %q", want, got)
+		}
+	}
+}
+
 func TestPasswordServerStoresSecretRef(t *testing.T) {
 	store := config.NewStore(t.TempDir())
 	m := NewModel(app.StateServerList, store, config.DefaultFile())

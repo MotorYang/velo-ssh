@@ -86,6 +86,8 @@ type Model struct {
 	pendingTaskCancelName string
 	pendingTaskReturn     app.AppState
 	pendingUpdate         updater.Release
+	updateProgress        updater.Progress
+	updateInstallCh       chan updateInstallMsg
 	clipboardFiles        []fileItem
 	clipboardRemote       bool
 }
@@ -181,6 +183,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingUpdate = msg.release
 			m.state = app.StateConfirmModal
 		}
+	case updateInstallMsg:
+		if msg.done {
+			versionInstalled := m.pendingUpdate.Version
+			m.clearUpdatePrompt()
+			m.updateInstallCh = nil
+			m.state = m.previous
+			if msg.err != nil {
+				m.err = fmt.Sprintf(m.tr(textUpdateInstallFailed), msg.err)
+				return m, nil
+			}
+			m.status = fmt.Sprintf(m.tr(textUpdateInstalled), versionInstalled)
+			return m, nil
+		}
+		m.updateProgress = msg.progress
+		m.modalKind = modalUpdateInstalling
+		m.state = app.StateConfirmModal
+		return m, waitUpdateInstallCmd(m.updateInstallCh)
 	case shellConnectedMsg:
 		m.ssh = msg.client
 		m.activeServer = msg.server
@@ -699,6 +718,9 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.modalKind == modalUpdateAvailable {
 		return m.handleUpdateAvailableConfirmKey(msg)
 	}
+	if m.modalKind == modalUpdateInstalling {
+		return m, nil
+	}
 	switch msg.String() {
 	case keyEsc, "n", "N":
 		m.state = m.previous
@@ -754,14 +776,11 @@ func (m Model) handleUpdateAvailableConfirmKey(msg tea.KeyMsg) (tea.Model, tea.C
 		m.clearUpdatePrompt()
 		m.state = m.previous
 	case keyEnter, "u", "U":
-		releaseURL := m.pendingUpdate.URL
-		if err := updater.OpenURL(releaseURL); err != nil {
-			m.err = fmt.Sprintf(m.tr(textUpdateOpenFailed), err)
-			return m, nil
-		}
-		m.status = fmt.Sprintf(m.tr(textUpdateOpenBrowser), releaseURL)
-		m.clearUpdatePrompt()
-		m.state = m.previous
+		m.modalKind = modalUpdateInstalling
+		m.updateProgress = updater.Progress{Stage: "selecting"}
+		m.updateInstallCh = make(chan updateInstallMsg, 16)
+		m.state = app.StateConfirmModal
+		return m, startUpdateInstallCmd(m.pendingUpdate, m.updateInstallCh)
 	}
 	return m, nil
 }
@@ -769,6 +788,7 @@ func (m Model) handleUpdateAvailableConfirmKey(msg tea.KeyMsg) (tea.Model, tea.C
 func (m *Model) clearUpdatePrompt() {
 	m.modalKind = ""
 	m.pendingUpdate = updater.Release{}
+	m.updateProgress = updater.Progress{}
 }
 
 func (m Model) handleOverwriteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -1125,6 +1145,11 @@ func (m Model) connectShellCmd(srv config.Server) tea.Cmd {
 
 type errMsg struct{ err error }
 type updateAvailableMsg struct{ release updater.Release }
+type updateInstallMsg struct {
+	progress updater.Progress
+	done     bool
+	err      error
+}
 type hostKeyPromptMsg struct {
 	err    *sshnet.UnknownHostKeyError
 	server config.Server
@@ -1163,6 +1188,27 @@ func (m Model) checkUpdateCmd() tea.Cmd {
 			return nil
 		}
 		return updateAvailableMsg{release: rel}
+	}
+}
+
+func startUpdateInstallCmd(rel updater.Release, ch chan updateInstallMsg) tea.Cmd {
+	return func() tea.Msg {
+		go func() {
+			err := updater.InstallLatestWithProgress(context.Background(), rel, func(progress updater.Progress) {
+				ch <- updateInstallMsg{progress: progress}
+			})
+			ch <- updateInstallMsg{done: true, err: err}
+		}()
+		return <-ch
+	}
+}
+
+func waitUpdateInstallCmd(ch chan updateInstallMsg) tea.Cmd {
+	return func() tea.Msg {
+		if ch == nil {
+			return nil
+		}
+		return <-ch
 	}
 }
 
