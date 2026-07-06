@@ -1,4 +1,6 @@
 .DS_Store
+.idea
 velo-ssh
 velo-ssh-*
 dist/
+/buglist.md
