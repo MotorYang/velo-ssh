@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/motoryang/velo-ssh/internal/config"
 	"github.com/motoryang/velo-ssh/internal/term"
 	"github.com/motoryang/velo-ssh/internal/transfer"
 )
 
 func (m Model) viewTaskCenter() string {
+	if m.taskDraftMode {
+		return m.viewDraftRetryCenter()
+	}
 	width := m.contentWidth()
 	inner := width - 2
 	body := []string{}
@@ -46,6 +50,50 @@ func (m Model) viewTaskCenter() string {
 		body = append(body, line)
 	}
 	return borderedBlock(m.tr(textTaskCenterTitle), width, body)
+}
+
+func (m Model) viewDraftRetryCenter() string {
+	width := m.contentWidth()
+	inner := width - 2
+	body := []string{"Mode: draft retry center"}
+	drafts := m.retryableDrafts()
+	if len(drafts) == 0 {
+		body = append(body, "No failed or pending drafts.")
+	}
+	cursor := clampCursor(m.draftCursor, len(drafts))
+	for i, draft := range drafts {
+		prefix := "  "
+		if i == cursor {
+			prefix = "> "
+		}
+		line := fmt.Sprintf("%s%-9s %-12s %s -> %s",
+			prefix,
+			draft.Status,
+			draft.ServerID,
+			draft.LocalPath,
+			draft.RemotePath,
+		)
+		line = term.Truncate(line, inner)
+		if i == cursor {
+			line = m.styles.selected.Render(line)
+		}
+		body = append(body, line)
+	}
+	return borderedBlock(m.tr(textTaskCenterTitle), width, body)
+}
+
+func (m Model) retryableDrafts() []config.Draft {
+	var drafts []config.Draft
+	for _, draft := range m.drafts {
+		switch draft.Status {
+		case config.DraftPending, config.DraftFailed, config.DraftSyncing:
+			drafts = append(drafts, draft)
+		}
+	}
+	sort.Slice(drafts, func(i, j int) bool {
+		return drafts[i].UpdatedAt.Before(drafts[j].UpdatedAt)
+	})
+	return drafts
 }
 
 func (m Model) taskSnapshots() []*transfer.Task {

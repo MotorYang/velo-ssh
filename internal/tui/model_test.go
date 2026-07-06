@@ -1001,6 +1001,40 @@ func TestOverwritePromptConfirmStartsTransferCommand(t *testing.T) {
 	}
 }
 
+func TestTaskCenterDraftRetryViewAndResolve(t *testing.T) {
+	store := config.NewStore(t.TempDir())
+	draft := config.Draft{
+		ID:         "draft-1",
+		ServerID:   "srv",
+		LocalPath:  "/tmp/app.conf",
+		RemotePath: "/etc/app.conf",
+		Status:     config.DraftFailed,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	if err := store.UpsertDraft(draft); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(app.StateTaskCenter, store, config.DefaultFile())
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	m = updated.(Model)
+	if !m.taskDraftMode {
+		t.Fatal("expected draft mode")
+	}
+	if got := m.viewTaskCenter(); !strings.Contains(got, "draft retry center") || !strings.Contains(got, "/etc/app.conf") {
+		t.Fatalf("draft center view = %q", got)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(Model)
+	f, err := store.LoadDrafts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Drafts) != 1 || f.Drafts[0].Status != config.DraftResolved {
+		t.Fatalf("drafts = %#v", f.Drafts)
+	}
+}
+
 func TestFileManagerOpensTaskCenterWithRefreshTick(t *testing.T) {
 	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), config.DefaultFile())
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})

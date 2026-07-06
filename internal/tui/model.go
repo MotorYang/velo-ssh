@@ -56,6 +56,9 @@ type Model struct {
 	remoteFiles           []fileItem
 	tasks                 *transfer.Manager
 	taskCursor            int
+	taskDraftMode         bool
+	draftCursor           int
+	drafts                []config.Draft
 	completedTasks        map[string]bool
 	ssh                   *sshnet.Client
 	activeServer          config.Server
@@ -138,6 +141,10 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 		activePane:     1,
 	}
 	m.tasks.SetConcurrency(cfg.Settings.TransferConcurrency)
+	_, _ = store.PruneExpiredDrafts(cfg.Settings.DraftTTLDays)
+	if drafts, err := store.LoadDrafts(); err == nil {
+		m.drafts = drafts.Drafts
+	}
 	m.searchInput = textinput.New()
 	m.searchInput.Placeholder = m.tr(textSearchServerPlaceholder)
 	m.searchInput.CharLimit = 120
@@ -241,6 +248,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case transferStartedMsg:
 		if msg.err != nil {
 			m.err = msg.err.Error()
+			return m, nil
+		}
+		m.status = msg.message
+		return m, taskCenterTickCmd()
+	case draftRetryStartedMsg:
+		if msg.err != nil {
+			m.err = msg.err.Error()
+			_ = m.store.UpdateDraftStatus(msg.draftID, config.DraftFailed)
+			if f, err := m.store.LoadDrafts(); err == nil {
+				m.drafts = f.Drafts
+			}
 			return m, nil
 		}
 		m.status = msg.message
@@ -370,11 +388,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleTaskCenterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.taskDraftMode {
+		return m.handleDraftCenterKey(msg)
+	}
 	tasks := m.taskSnapshots()
 	m.taskCursor = clampCursor(m.taskCursor, len(tasks))
 	switch msg.String() {
 	case "t", keyEsc, "q":
 		m.state = m.previous
+	case "D":
+		m.taskDraftMode = true
+		if drafts, err := m.store.LoadDrafts(); err == nil {
+			m.drafts = drafts.Drafts
+		}
+		m.draftCursor = clampCursor(m.draftCursor, len(m.retryableDrafts()))
 	case keyUp, "k":
 		if m.taskCursor > 0 {
 			m.taskCursor--
@@ -418,6 +445,65 @@ func (m Model) handleTaskCenterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Resumed task %s.", tasks[m.taskCursor].ID)
 	case "R":
 		m.status = "Task center refreshed."
+	}
+	return m, nil
+}
+
+func (m Model) handleDraftCenterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	drafts := m.retryableDrafts()
+	m.draftCursor = clampCursor(m.draftCursor, len(drafts))
+	switch msg.String() {
+	case "t", keyEsc, "q":
+		m.taskDraftMode = false
+	case "D":
+		m.taskDraftMode = false
+	case keyUp, "k":
+		if m.draftCursor > 0 {
+			m.draftCursor--
+		}
+	case keyDown, "j":
+		if m.draftCursor < len(drafts)-1 {
+			m.draftCursor++
+		}
+	case "x":
+		if len(drafts) == 0 {
+			m.err = "no draft selected"
+			return m, nil
+		}
+		if err := m.store.UpdateDraftStatus(drafts[m.draftCursor].ID, config.DraftResolved); err != nil {
+			m.err = err.Error()
+			return m, nil
+		}
+		m.status = fmt.Sprintf("Resolved draft %s.", drafts[m.draftCursor].ID)
+		if f, err := m.store.LoadDrafts(); err == nil {
+			m.drafts = f.Drafts
+		}
+	case "r":
+		if len(drafts) == 0 {
+			m.err = "no draft selected"
+			return m, nil
+		}
+		draft := drafts[m.draftCursor]
+		if m.ssh == nil || m.activeServer.ID == "" || m.activeServer.ID != draft.ServerID {
+			m.err = "retry draft failed: connect to the draft server before retrying"
+			return m, nil
+		}
+		if err := m.store.UpdateDraftStatus(draft.ID, config.DraftSyncing); err != nil {
+			m.err = err.Error()
+			return m, nil
+		}
+		if f, err := m.store.LoadDrafts(); err == nil {
+			m.drafts = f.Drafts
+		}
+		task := transfer.NewTask(newTaskID("draft"), transfer.Upload, draft.LocalPath, draft.RemotePath)
+		task.ServerID = draft.ServerID
+		m.status = fmt.Sprintf("Retrying draft %s.", draft.ID)
+		return m, m.startDraftRetryCmd(task, draft.ID)
+	case "R":
+		if f, err := m.store.LoadDrafts(); err == nil {
+			m.drafts = f.Drafts
+			m.status = "Draft retry center refreshed."
+		}
 	}
 	return m, nil
 }
@@ -1197,6 +1283,11 @@ type transferStartedMsg struct {
 	message string
 	err     error
 }
+type draftRetryStartedMsg struct {
+	draftID string
+	message string
+	err     error
+}
 type overwritePromptMsg struct {
 	direction transfer.Direction
 	items     []fileItem
@@ -1213,6 +1304,22 @@ func (m Model) checkUpdateCmd() tea.Cmd {
 			return nil
 		}
 		return updateAvailableMsg{release: rel}
+	}
+}
+
+func (m Model) startDraftRetryCmd(task *transfer.Task, draftID string) tea.Cmd {
+	return func() tea.Msg {
+		if m.ssh == nil {
+			return draftRetryStartedMsg{draftID: draftID, err: fmt.Errorf("retry draft failed: ssh client is not connected")}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		client, err := m.ssh.OpenSFTP(ctx)
+		if err != nil {
+			return draftRetryStartedMsg{draftID: draftID, err: err}
+		}
+		m.tasks.Start(context.Background(), client, task)
+		return draftRetryStartedMsg{draftID: draftID, message: fmt.Sprintf("Started draft retry task %s.", task.ID)}
 	}
 }
 
