@@ -26,6 +26,7 @@ type chunkManifest struct {
 	Size       int64          `json:"size"`
 	ModTime    time.Time      `json:"modTime"`
 	ChunkSize  int64          `json:"chunkSize"`
+	TempPath   string         `json:"tempPath"`
 	Chunks     map[int64]bool `json:"chunks"`
 	UpdatedAt  time.Time      `json:"updatedAt"`
 }
@@ -53,11 +54,15 @@ func AtomicMultipartUpload(client *sftp.Client, localPath, remotePath, taskID st
 	if err != nil {
 		return err
 	}
-	manifest, err := loadChunkManifest(manifestPath, localPath, remotePath, total, localInfo.ModTime(), chunkSize)
+	manifest, fresh, err := loadChunkManifest(manifestPath, localPath, remotePath, total, localInfo.ModTime(), chunkSize)
 	if err != nil {
 		return err
 	}
-	tmpPath := TempRemotePath(remotePath, taskID)
+	if manifest.TempPath == "" {
+		manifest.TempPath = stableMultipartTempPath(remotePath, manifestPath)
+		fresh = true
+	}
+	tmpPath := manifest.TempPath
 	if tempPath != nil {
 		tempPath(tmpPath)
 	}
@@ -71,9 +76,17 @@ func AtomicMultipartUpload(client *sftp.Client, localPath, remotePath, taskID st
 	if err != nil {
 		return err
 	}
-	if err := remote.Truncate(total); err != nil {
-		_ = remote.Close()
-		return err
+	if fresh || !remoteTempExists(client, tmpPath) {
+		if err := remote.Truncate(total); err != nil {
+			_ = remote.Close()
+			return err
+		}
+		manifest.Chunks = map[int64]bool{}
+		manifest.UpdatedAt = time.Now()
+		if err := saveChunkManifest(manifestPath, manifest); err != nil {
+			_ = remote.Close()
+			return err
+		}
 	}
 	_ = remote.Close()
 	chunks := buildUploadChunks(total, chunkSize)
@@ -220,7 +233,7 @@ func multipartManifestPath(localPath, remotePath string, size int64, modTime tim
 	return filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), nil
 }
 
-func loadChunkManifest(path, localPath, remotePath string, size int64, modTime time.Time, chunkSize int64) (chunkManifest, error) {
+func loadChunkManifest(path, localPath, remotePath string, size int64, modTime time.Time, chunkSize int64) (chunkManifest, bool, error) {
 	data, err := os.ReadFile(path)
 	if err == nil {
 		var manifest chunkManifest
@@ -231,11 +244,11 @@ func loadChunkManifest(path, localPath, remotePath string, size int64, modTime t
 			manifest.ModTime.Equal(modTime) &&
 			manifest.ChunkSize == chunkSize &&
 			manifest.Chunks != nil {
-			return manifest, nil
+			return manifest, false, nil
 		}
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return chunkManifest{}, err
+		return chunkManifest{}, false, err
 	}
 	return chunkManifest{
 		Version:    1,
@@ -244,9 +257,21 @@ func loadChunkManifest(path, localPath, remotePath string, size int64, modTime t
 		Size:       size,
 		ModTime:    modTime,
 		ChunkSize:  chunkSize,
+		TempPath:   stableMultipartTempPath(remotePath, path),
 		Chunks:     map[int64]bool{},
 		UpdatedAt:  time.Now(),
-	}, nil
+	}, true, nil
+}
+
+func stableMultipartTempPath(remotePath, manifestPath string) string {
+	sum := sha256.Sum256([]byte(manifestPath))
+	suffix := hex.EncodeToString(sum[:])[:16]
+	return TempRemotePath(remotePath, "multipart-"+suffix)
+}
+
+func remoteTempExists(client *sftp.Client, tmpPath string) bool {
+	_, err := client.Stat(tmpPath)
+	return err == nil
 }
 
 func saveChunkManifest(path string, manifest chunkManifest) error {
