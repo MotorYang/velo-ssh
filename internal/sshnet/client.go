@@ -224,6 +224,47 @@ func (c *Client) WindowChange(height, width int) error {
 	return sh.WindowChange(height, width)
 }
 
+func (c *Client) RunCommand(ctx context.Context, command string) error {
+	c.mu.Lock()
+	client := c.ssh
+	stale := c.stale
+	c.mu.Unlock()
+	if stale {
+		return fmt.Errorf("stale connection: ssh keepalive failed")
+	}
+	if client == nil {
+		return fmt.Errorf("run command: ssh client is not connected")
+	}
+	type result struct {
+		output []byte
+		err    error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		session, err := client.NewSession()
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+		defer session.Close()
+		output, err := session.CombinedOutput(command)
+		ch <- result{output: output, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case res := <-ch:
+		if res.err != nil {
+			out := strings.TrimSpace(string(res.output))
+			if out != "" {
+				return fmt.Errorf("run command %q: %w: %s", command, res.err, out)
+			}
+			return fmt.Errorf("run command %q: %w", command, res.err)
+		}
+		return nil
+	}
+}
+
 func (c *Client) Stale() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

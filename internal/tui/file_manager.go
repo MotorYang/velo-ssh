@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -247,6 +249,18 @@ func (m Model) startUploadCmd(force bool, items []fileItem) tea.Cmd {
 		if err != nil {
 			return transferStartedMsg{err: err}
 		}
+		if shouldArchiveFolderUpload(items) {
+			archiveCtx, archiveCancel := context.WithTimeout(context.Background(), 30*time.Minute)
+			defer archiveCancel()
+			if err := m.uploadFoldersAsArchives(archiveCtx, client, items); err != nil {
+				return transferStartedMsg{err: err}
+			}
+			remoteFiles, err := listRemoteFiles(client, m.remoteDir)
+			if err != nil {
+				return transferStartedMsg{err: err}
+			}
+			return filePanesLoadedMsg{local: m.localFiles, remote: remoteFiles}
+		}
 		plans, err := prepareUploadPlans(client, items, m.localDir, m.remoteDir)
 		if err != nil {
 			return transferStartedMsg{err: err}
@@ -425,6 +439,128 @@ func collectLocalUploadPlans(localDir, localRoot, remoteDir string, matcher igno
 		}
 	}
 	return plans, nil
+}
+
+func shouldArchiveFolderUpload(items []fileItem) bool {
+	if len(items) == 0 {
+		return false
+	}
+	for _, item := range items {
+		if item.Name == ".." || !item.IsDir {
+			return false
+		}
+	}
+	return true
+}
+
+func (m Model) uploadFoldersAsArchives(ctx context.Context, client *sftp.Client, items []fileItem) error {
+	if m.ssh == nil {
+		return fmt.Errorf("archive upload failed: ssh client is not connected")
+	}
+	matcher, err := ignore.LoadFile(filepath.Join(m.localDir, ".vsshignore"))
+	if err != nil {
+		return actionError("read .vsshignore", filepath.Join(m.localDir, ".vsshignore"), err)
+	}
+	for _, item := range items {
+		targetDir := path.Join(m.remoteDir, item.Name)
+		if err := ensureRemoteDir(client, targetDir, item.Mode); err != nil {
+			return actionError("create remote archive target directory", targetDir, err)
+		}
+		archivePath, err := createFolderArchive(item.Path, m.localDir, matcher)
+		if err != nil {
+			return actionError("create tar.gz archive", item.Path, err)
+		}
+		defer os.Remove(archivePath)
+		taskID := newTaskID("tar")
+		remoteArchive := path.Join(m.remoteDir, fmt.Sprintf(".%s.vssh.tar.gz.%s", item.Name, taskID))
+		if err := transfer.AtomicUpload(client, archivePath, remoteArchive, taskID, nil, nil, nil, nil); err != nil {
+			return actionError("upload tar.gz archive", remoteArchive, err)
+		}
+		command := "tar -xzf " + shellQuote(remoteArchive) + " -C " + shellQuote(targetDir) + " && rm -f " + shellQuote(remoteArchive)
+		if err := m.ssh.RunCommand(ctx, command); err != nil {
+			_ = client.Remove(remoteArchive)
+			return actionError("extract remote tar.gz archive", targetDir, err)
+		}
+	}
+	return nil
+}
+
+func createFolderArchive(sourceDir, localRoot string, matcher ignore.Matcher) (string, error) {
+	tmp, err := os.CreateTemp("", "velossh-folder-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		_ = tmp.Close()
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	gz := gzip.NewWriter(tmp)
+	tw := tar.NewWriter(gz)
+	err = filepath.WalkDir(sourceDir, func(filePath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if filePath == sourceDir {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		relToRoot, err := filepath.Rel(localRoot, filePath)
+		if err == nil && matcher.Ignored(relToRoot, info.IsDir()) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		relToSource, err := filepath.Rel(sourceDir, filePath)
+		if err != nil {
+			return err
+		}
+		name := filepath.ToSlash(relToSource)
+		if info.IsDir() {
+			header := &tar.Header{Name: name + "/", Mode: int64(info.Mode().Perm()), ModTime: info.ModTime(), Typeflag: tar.TypeDir}
+			return tw.WriteHeader(header)
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = name
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+		file, err := os.Open(filePath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = io.Copy(tw, file)
+		return err
+	})
+	if closeErr := tw.Close(); err == nil {
+		err = closeErr
+	}
+	if closeErr := gz.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return "", err
+	}
+	cleanup = false
+	return tmpPath, nil
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func prepareDownloadPlans(client *sftp.Client, items []fileItem, localDir string) ([]transferPlan, error) {

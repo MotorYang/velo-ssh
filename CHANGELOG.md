@@ -11,3 +11,4 @@
 - Added real `vssh export` and `vssh import` configuration backup commands with optional secret backup.
 - Added `.vsshignore` filtering for recursive local folder uploads.
 - Added file manager SHA-256 compare and small text diff for selected local/remote files.
+- Added tar.gz archive optimization for selected local folder uploads.
