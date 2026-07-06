@@ -92,6 +92,9 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Show environment labels in the server list.
 - [x] Support cloning servers from the manager.
 - [x] Warn before leaving dirty server forms.
+- [x] Implement real `vssh export` for configuration backups.
+- [x] Implement real `vssh import` for configuration backups.
+- [x] Support explicit secret export/import with `--include-secrets`.
 
 ## High Priority
 
@@ -200,8 +203,6 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [ ] Implement folder tar.gz streaming optimization.
 - [ ] Implement `.vsshignore`.
 - [ ] Implement draft retry center for failed remote edit uploads.
-- [ ] Implement real `vssh export`.
-- [ ] Implement real `vssh import`.
 - [ ] Implement hash compare.
 - [ ] Implement text diff.
 - [ ] Implement cross-server direct transfer.
