@@ -10,3 +10,4 @@
 - Improved SSH shell exit handling so `exit` returns to the server list.
 - Added real `vssh export` and `vssh import` configuration backup commands with optional secret backup.
 - Added `.vsshignore` filtering for recursive local folder uploads.
+- Added file manager SHA-256 compare and small text diff for selected local/remote files.

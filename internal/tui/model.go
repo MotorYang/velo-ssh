@@ -88,6 +88,7 @@ type Model struct {
 	pendingUpdate         updater.Release
 	updateProgress        updater.Progress
 	updateInstallCh       chan updateInstallMsg
+	compareResult         string
 	clipboardFiles        []fileItem
 	clipboardRemote       bool
 }
@@ -228,6 +229,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.remoteFiles = msg.remote
 		m.localCursor = clampCursor(m.localCursor, len(filteredFileItems(m.localFiles, m.localFileFilter)))
 		m.remoteCursor = clampCursor(m.remoteCursor, len(filteredFileItems(m.remoteFiles, m.remoteFileFilter)))
+	case compareResultMsg:
+		if msg.err != nil {
+			m.err = displayError(msg.err)
+			return m, nil
+		}
+		m.previous = m.state
+		m.modalKind = modalCompareResult
+		m.compareResult = msg.result
+		m.state = app.StateConfirmModal
 	case transferStartedMsg:
 		if msg.err != nil {
 			m.err = msg.err.Error()
@@ -721,6 +731,15 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.modalKind == modalUpdateInstalling {
 		return m, nil
 	}
+	if m.modalKind == modalCompareResult {
+		switch msg.String() {
+		case keyEsc, keyEnter, "q", "Q", "n", "N":
+			m.modalKind = ""
+			m.compareResult = ""
+			m.state = m.previous
+		}
+		return m, nil
+	}
 	switch msg.String() {
 	case keyEsc, "n", "N":
 		m.state = m.previous
@@ -1119,6 +1138,8 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.startUploadCmd(false, nil)
 	case "d":
 		return m, m.startDownloadCmd(false, nil)
+	case "=":
+		return m, m.compareFilesCmd()
 	case "m":
 		m.showFileTime = !m.showFileTime
 	case "R":
@@ -1166,6 +1187,10 @@ type fileManagerConnectedMsg struct {
 type filePanesLoadedMsg struct {
 	local  []fileItem
 	remote []fileItem
+	err    error
+}
+type compareResultMsg struct {
+	result string
 	err    error
 }
 type transferStartedMsg struct {

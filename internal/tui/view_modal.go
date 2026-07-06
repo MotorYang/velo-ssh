@@ -17,6 +17,7 @@ const (
 	modalServerFormDiscard = "server_form_discard"
 	modalUpdateAvailable   = "update_available"
 	modalUpdateInstalling  = "update_installing"
+	modalCompareResult     = "compare_result"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -154,7 +155,14 @@ func (m Model) viewUpdateInstalling() string {
 	)
 }
 
+func (m Model) viewCompareResult() string {
+	return m.viewModal(m.tr(textCompareResultPrompt) + "\n\n" + m.compareResult + "\n\n" + m.tr(textCompareCloseAction))
+}
+
 func (m Model) viewConfirmModal() string {
+	if m.modalKind == modalCompareResult {
+		return m.viewCompareResult()
+	}
 	if m.modalKind == modalUpdateInstalling {
 		return m.viewUpdateInstalling()
 	}
