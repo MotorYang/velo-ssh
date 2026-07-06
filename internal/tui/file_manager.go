@@ -14,6 +14,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/motoryang/velo-ssh/internal/config"
+	"github.com/motoryang/velo-ssh/internal/ignore"
 	"github.com/motoryang/velo-ssh/internal/sshnet"
 	"github.com/motoryang/velo-ssh/internal/transfer"
 	"github.com/pkg/sftp"
@@ -246,7 +247,7 @@ func (m Model) startUploadCmd(force bool, items []fileItem) tea.Cmd {
 		if err != nil {
 			return transferStartedMsg{err: err}
 		}
-		plans, err := prepareUploadPlans(client, items, m.remoteDir)
+		plans, err := prepareUploadPlans(client, items, m.localDir, m.remoteDir)
 		if err != nil {
 			return transferStartedMsg{err: err}
 		}
@@ -354,10 +355,18 @@ type transferPlan struct {
 	target string
 }
 
-func prepareUploadPlans(client *sftp.Client, items []fileItem, remoteDir string) ([]transferPlan, error) {
+func prepareUploadPlans(client *sftp.Client, items []fileItem, localRoot, remoteDir string) ([]transferPlan, error) {
+	matcher, err := ignore.LoadFile(filepath.Join(localRoot, ".vsshignore"))
+	if err != nil {
+		return nil, actionError("read .vsshignore", filepath.Join(localRoot, ".vsshignore"), err)
+	}
 	var plans []transferPlan
 	for _, item := range items {
 		if item.Name == ".." {
+			continue
+		}
+		rel, err := filepath.Rel(localRoot, item.Path)
+		if err == nil && matcher.Ignored(rel, item.IsDir) {
 			continue
 		}
 		target := path.Join(remoteDir, item.Name)
@@ -365,7 +374,7 @@ func prepareUploadPlans(client *sftp.Client, items []fileItem, remoteDir string)
 			if err := ensureRemoteDir(client, target, item.Mode); err != nil {
 				return nil, actionError("create remote upload directory", target, err)
 			}
-			childPlans, err := collectUploadDirPlans(client, item.Path, target)
+			childPlans, err := collectUploadDirPlans(client, item.Path, localRoot, target, matcher)
 			if err != nil {
 				return nil, err
 			}
@@ -377,13 +386,13 @@ func prepareUploadPlans(client *sftp.Client, items []fileItem, remoteDir string)
 	return plans, nil
 }
 
-func collectUploadDirPlans(client *sftp.Client, localDir, remoteDir string) ([]transferPlan, error) {
-	return collectLocalUploadPlans(localDir, remoteDir, func(remotePath string, mode os.FileMode) error {
+func collectUploadDirPlans(client *sftp.Client, localDir, localRoot, remoteDir string, matcher ignore.Matcher) ([]transferPlan, error) {
+	return collectLocalUploadPlans(localDir, localRoot, remoteDir, matcher, func(remotePath string, mode os.FileMode) error {
 		return ensureRemoteDir(client, remotePath, mode)
 	})
 }
 
-func collectLocalUploadPlans(localDir, remoteDir string, ensureDir func(string, os.FileMode) error) ([]transferPlan, error) {
+func collectLocalUploadPlans(localDir, localRoot, remoteDir string, matcher ignore.Matcher, ensureDir func(string, os.FileMode) error) ([]transferPlan, error) {
 	entries, err := os.ReadDir(localDir)
 	if err != nil {
 		return nil, actionError("read local upload directory", localDir, err)
@@ -395,12 +404,16 @@ func collectLocalUploadPlans(localDir, remoteDir string, ensureDir func(string, 
 			return nil, actionError("stat local upload path", filepath.Join(localDir, entry.Name()), err)
 		}
 		localPath := filepath.Join(localDir, entry.Name())
+		rel, err := filepath.Rel(localRoot, localPath)
+		if err == nil && matcher.Ignored(rel, info.IsDir()) {
+			continue
+		}
 		remotePath := path.Join(remoteDir, entry.Name())
 		if info.IsDir() {
 			if err := ensureDir(remotePath, info.Mode()); err != nil {
 				return nil, actionError("create remote upload directory", remotePath, err)
 			}
-			childPlans, err := collectLocalUploadPlans(localPath, remotePath, ensureDir)
+			childPlans, err := collectLocalUploadPlans(localPath, localRoot, remotePath, matcher, ensureDir)
 			if err != nil {
 				return nil, err
 			}

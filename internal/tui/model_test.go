@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/motoryang/velo-ssh/internal/app"
 	"github.com/motoryang/velo-ssh/internal/config"
+	"github.com/motoryang/velo-ssh/internal/ignore"
 	"github.com/motoryang/velo-ssh/internal/sshnet"
 	"github.com/motoryang/velo-ssh/internal/transfer"
 	"github.com/motoryang/velo-ssh/internal/updater"
@@ -1245,7 +1246,7 @@ func TestCollectLocalUploadPlansForNestedFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	var madeDirs []string
-	plans, err := collectLocalUploadPlans(dir, "/remote/base", func(remotePath string, _ os.FileMode) error {
+	plans, err := collectLocalUploadPlans(dir, dir, "/remote/base", ignore.Matcher{}, func(remotePath string, _ os.FileMode) error {
 		madeDirs = append(madeDirs, remotePath)
 		return nil
 	})
@@ -1260,6 +1261,53 @@ func TestCollectLocalUploadPlansForNestedFolder(t *testing.T) {
 	}
 	if len(madeDirs) != 1 || madeDirs[0] != "/remote/base/nested" {
 		t.Fatalf("made dirs = %v, want nested dir", madeDirs)
+	}
+}
+
+func TestCollectLocalUploadPlansRespectsVSSHIgnore(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "nested")
+	dist := filepath.Join(dir, "dist")
+	if err := os.Mkdir(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(dist, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(dir, "keep.txt"):          "keep",
+		filepath.Join(dir, "skip.log"):          "skip",
+		filepath.Join(nested, "child.log"):      "skip",
+		filepath.Join(nested, "important.conf"): "keep",
+		filepath.Join(dist, "asset.txt"):        "skip",
+	}
+	for filePath, content := range files {
+		if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	matcher := ignore.New([]string{"*.log", "dist/"})
+	var madeDirs []string
+	plans, err := collectLocalUploadPlans(dir, dir, "/remote/base", matcher, func(remotePath string, _ os.FileMode) error {
+		madeDirs = append(madeDirs, remotePath)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotTargets := make([]string, 0, len(plans))
+	for _, plan := range plans {
+		gotTargets = append(gotTargets, plan.target)
+	}
+	sort.Strings(gotTargets)
+	wantTargets := []string{"/remote/base/keep.txt", "/remote/base/nested/important.conf"}
+	if strings.Join(gotTargets, ",") != strings.Join(wantTargets, ",") {
+		t.Fatalf("targets = %v, want %v", gotTargets, wantTargets)
+	}
+	for _, dir := range madeDirs {
+		if strings.Contains(dir, "dist") {
+			t.Fatalf("ignored directory was created remotely: %v", madeDirs)
+		}
 	}
 }
 

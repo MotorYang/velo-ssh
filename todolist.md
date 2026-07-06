@@ -95,6 +95,7 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Implement real `vssh export` for configuration backups.
 - [x] Implement real `vssh import` for configuration backups.
 - [x] Support explicit secret export/import with `--include-secrets`.
+- [x] Implement `.vsshignore` filtering for recursive local folder uploads.
 
 ## High Priority
 
@@ -201,7 +202,6 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 ## v1.1 Or Later
 
 - [ ] Implement folder tar.gz streaming optimization.
-- [ ] Implement `.vsshignore`.
 - [ ] Implement draft retry center for failed remote edit uploads.
 - [ ] Implement hash compare.
 - [ ] Implement text diff.
