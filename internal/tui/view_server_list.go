@@ -39,7 +39,7 @@ func (m Model) viewServerList() string {
 				if item.index == m.cursor {
 					prefix = "> "
 				}
-				line := fmt.Sprintf("%s%s [%s] %s@%s:%d", prefix, srv.Name, defaultServerEnv(srv.Env), srv.User, srv.Host, srv.Port)
+				line := fmt.Sprintf("%s%s [%s] [%s] %s@%s:%d", prefix, srv.Name, defaultServerEnv(srv.Env), m.serverHealthLabel(srv.ID), srv.User, srv.Host, srv.Port)
 				line = term.Truncate(line, inner)
 				if item.index == m.cursor {
 					line = m.styles.selected.Render(line)
@@ -52,6 +52,20 @@ func (m Model) viewServerList() string {
 		}
 	}
 	return borderedBlock(m.tr(textManagerTitle), width, body)
+}
+
+func (m Model) serverHealthLabel(id string) string {
+	health, ok := m.serverHealth[id]
+	if !ok || !health.Checked {
+		return "?"
+	}
+	if !health.Online {
+		return "down"
+	}
+	if health.Latency <= 0 {
+		return "up"
+	}
+	return fmt.Sprintf("up %dms", health.Latency.Milliseconds())
 }
 
 func defaultServerEnv(env string) string {

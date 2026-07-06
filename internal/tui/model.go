@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,6 +33,13 @@ type fileItem struct {
 	Selected bool
 }
 
+type serverHealth struct {
+	Checked bool
+	Online  bool
+	Latency time.Duration
+	Error   string
+}
+
 type Model struct {
 	state                 app.AppState
 	previous              app.AppState
@@ -46,6 +54,7 @@ type Model struct {
 	filter                string
 	status                string
 	err                   string
+	serverHealth          map[string]serverHealth
 	activePane            int
 	localCursor           int
 	remoteCursor          int
@@ -138,6 +147,7 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 		remoteDir:      cfg.Settings.FallbackRemotePath,
 		tasks:          transfer.NewManager(),
 		completedTasks: map[string]bool{},
+		serverHealth:   map[string]serverHealth{},
 		activePane:     1,
 	}
 	m.tasks.SetConcurrency(cfg.Settings.TransferConcurrency)
@@ -162,7 +172,10 @@ func NewModel(start app.AppState, store *config.Store, cfg config.File) Model {
 
 func (m Model) Init() tea.Cmd {
 	if m.state == app.StateServerList && !m.config.Settings.DisableUpdateCheck {
-		return tea.Batch(textinput.Blink, m.checkUpdateCmd())
+		return tea.Batch(textinput.Blink, m.checkUpdateCmd(), m.checkServerHealthCmd())
+	}
+	if m.state == app.StateServerList {
+		return tea.Batch(textinput.Blink, m.checkServerHealthCmd())
 	}
 	return textinput.Blink
 }
@@ -177,6 +190,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case errMsg:
 		m.err = displayError(msg.err)
+	case serverHealthMsg:
+		if m.serverHealth == nil {
+			m.serverHealth = map[string]serverHealth{}
+		}
+		m.serverHealth[msg.id] = msg.health
 	case hostKeyPromptMsg:
 		m.previous = m.state
 		m.modalKind = modalHostKey
@@ -1282,6 +1300,10 @@ func (m Model) connectShellCmd(srv config.Server) tea.Cmd {
 }
 
 type errMsg struct{ err error }
+type serverHealthMsg struct {
+	id     string
+	health serverHealth
+}
 type updateAvailableMsg struct{ release updater.Release }
 type updateInstallMsg struct {
 	progress updater.Progress
@@ -1336,6 +1358,28 @@ func (m Model) checkUpdateCmd() tea.Cmd {
 		}
 		return updateAvailableMsg{release: rel}
 	}
+}
+
+func (m Model) checkServerHealthCmd() tea.Cmd {
+	servers := append([]config.Server(nil), m.config.Servers...)
+	if len(servers) == 0 {
+		return nil
+	}
+	cmds := make([]tea.Cmd, 0, len(servers))
+	for _, srv := range servers {
+		server := srv
+		cmds = append(cmds, func() tea.Msg {
+			start := time.Now()
+			addr := net.JoinHostPort(server.Host, fmt.Sprintf("%d", server.Port))
+			conn, err := net.DialTimeout("tcp", addr, 800*time.Millisecond)
+			if err != nil {
+				return serverHealthMsg{id: server.ID, health: serverHealth{Checked: true, Online: false, Error: err.Error()}}
+			}
+			_ = conn.Close()
+			return serverHealthMsg{id: server.ID, health: serverHealth{Checked: true, Online: true, Latency: time.Since(start)}}
+		})
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) startDraftRetryCmd(task *transfer.Task, draftID string) tea.Cmd {

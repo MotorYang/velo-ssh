@@ -144,10 +144,22 @@ func TestServerListGroupsByTagWithDefaultFallback(t *testing.T) {
 	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
 	m.width = 100
 	got := m.viewServerList()
-	for _, want := range []string{"[prod]", "[web]", "[default]", "Prod Web [prod] root@10.0.0.1:22", "Untagged [dev] deploy@10.0.0.2:22"} {
+	for _, want := range []string{"[prod]", "[web]", "[default]", "Prod Web [prod] [?] root@10.0.0.1:22", "Untagged [dev] [?] deploy@10.0.0.2:22"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("server list missing %q in %q", want, got)
 		}
+	}
+}
+
+func TestServerListRendersHealthStatus(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Servers = []config.Server{{ID: "dev", Name: "Dev", Env: "dev", Host: "127.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent}}
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
+	m.width = 100
+	m.serverHealth["dev"] = serverHealth{Checked: true, Online: true, Latency: 12 * time.Millisecond}
+	got := m.viewServerList()
+	if !strings.Contains(got, "[up 12ms]") {
+		t.Fatalf("server list should render health: %q", got)
 	}
 }
 
