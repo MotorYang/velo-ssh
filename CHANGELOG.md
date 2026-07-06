@@ -14,3 +14,4 @@
 - Added tar.gz archive optimization for selected local folder uploads.
 - Added draft retry center support in Task Center with retry/resolve actions and TTL pruning.
 - Added `vssh copy <source-server>:<path> <target-server>:<path>` for cross-server remote file transfer.
+- Added multipart parallel upload resume with local chunk manifests for large files.

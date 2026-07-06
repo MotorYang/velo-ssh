@@ -199,7 +199,11 @@ func (m *Manager) run(job *job) {
 	var err error
 	switch job.task.Direction {
 	case Upload:
-		err = AtomicUpload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.SetTempPath, job.task.cancel, job.task.WaitIfPaused)
+		if shouldUseMultipartUpload(job.task.SourcePath) {
+			err = AtomicMultipartUpload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, 4, progress, job.task.SetTempPath, job.task.cancel, job.task.WaitIfPaused)
+		} else {
+			err = AtomicUpload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.SetTempPath, job.task.cancel, job.task.WaitIfPaused)
+		}
 	case Download:
 		err = AtomicDownload(job.client, job.task.SourcePath, job.task.TargetPath, job.task.ID, progress, job.task.SetTempPath, job.task.cancel, job.task.WaitIfPaused)
 	default:
@@ -227,6 +231,11 @@ func (m *Manager) run(job *job) {
 	}
 	m.mu.Unlock()
 	m.schedule()
+}
+
+func shouldUseMultipartUpload(localPath string) bool {
+	info, err := os.Stat(localPath)
+	return err == nil && !info.IsDir() && info.Size() >= MultipartThreshold
 }
 
 func cleanupTaskTemp(client *sftp.Client, task *Task) error {
