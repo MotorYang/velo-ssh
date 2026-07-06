@@ -182,3 +182,65 @@ func AtomicDownload(client *sftp.Client, remotePath, localPath, taskID string, p
 	cleanup = false
 	return nil
 }
+
+func AtomicRemoteCopy(sourceClient *sftp.Client, targetClient *sftp.Client, sourcePath, targetPath, taskID string, progress func(done, total int64)) error {
+	source, err := sourceClient.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	info, err := source.Stat()
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("cross-server copy only supports regular files")
+	}
+	total := info.Size()
+	tmpPath := TempRemotePath(targetPath, taskID)
+	target, err := targetClient.Create(tmpPath)
+	if err != nil {
+		return err
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = targetClient.Remove(tmpPath)
+		}
+	}()
+	w := &progressCopyWriter{writer: target, total: total, progress: progress}
+	if _, err := io.CopyBuffer(w, source, make([]byte, bufferSize)); err != nil {
+		_ = target.Close()
+		return err
+	}
+	if err := target.Close(); err != nil {
+		return err
+	}
+	if st, err := targetClient.Stat(tmpPath); err != nil {
+		return err
+	} else if st.Size() != total {
+		return fmt.Errorf("cross-server copy size mismatch: got %d want %d", st.Size(), total)
+	}
+	_ = targetClient.Chmod(tmpPath, info.Mode())
+	if err := targetClient.Rename(tmpPath, targetPath); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
+}
+
+type progressCopyWriter struct {
+	writer   io.Writer
+	done     int64
+	total    int64
+	progress func(done, total int64)
+}
+
+func (w *progressCopyWriter) Write(p []byte) (int, error) {
+	n, err := w.writer.Write(p)
+	w.done += int64(n)
+	if w.progress != nil {
+		w.progress(w.done, w.total)
+	}
+	return n, err
+}

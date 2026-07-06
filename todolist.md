@@ -101,6 +101,7 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 - [x] Implement tar.gz archive optimization for selected local folder uploads.
 - [x] Implement draft retry center inside Task Center.
 - [x] Prune expired drafts using `draftTTLDays`.
+- [x] Implement cross-server remote file copy through `vssh copy`.
 
 ## High Priority
 
@@ -206,7 +207,6 @@ This todo list is based on `docs/aispec.md` MVP v1.0 and the current implementat
 
 ## v1.1 Or Later
 
-- [ ] Implement cross-server direct transfer.
 - [ ] Implement multi-part parallel resume with chunk manifest.
 - [ ] Implement rich theme marketplace.
 
