@@ -187,8 +187,8 @@ var zhText = map[string]string{
 	textFooterFileSearch:        "[Enter] 应用文件搜索 | [Esc] 取消搜索",
 	textFooterRename:            "[Enter] 保存重命名 | [Esc] 取消重命名",
 	textFooterCreateDir:         "[Enter] 创建目录 | [Esc] 取消",
-	textFooterFileSingle:        "[/] 搜索 | [b] 显示本地 | [q] SSH 面板 | [Enter] 打开 | [Space] 选择 | [y] 复制 | [v] 粘贴 | [M] 移动 | [n] 新建目录 | [x] 删除 | [r] 重命名 | [m] 切换时间 | [d] 下载 | [R] 刷新 | [t] 任务",
-	textFooterFileSplit:         "[/] 搜索 | [Tab] 面板 | [b] 隐藏本地 | [q] SSH 面板 | [Enter] 打开 | [Space] 选择 | [a] 全选 | [c] 清空 | [y] 复制 | [v] 粘贴 | [M] 移动 | [n] 新建目录 | [x] 删除 | [r] 重命名 | [u] 上传 | [m] 切换时间 | [d] 下载 | [=] 对比 | [R] 刷新 | [t] 任务",
+	textFooterFileSingle:        "[/] 搜索 | [b] 显示本地 | [q] SSH 面板 | [Enter] 打开 | [Space] 选择 | [E] 编辑 | [y] 复制 | [v] 粘贴 | [M] 移动 | [n] 新建目录 | [x] 删除 | [r] 重命名 | [m] 切换时间 | [d] 下载 | [R] 刷新 | [t] 任务",
+	textFooterFileSplit:         "[/] 搜索 | [Tab] 面板 | [b] 隐藏本地 | [q] SSH 面板 | [Enter] 打开 | [Space] 选择 | [a] 全选 | [c] 清空 | [E] 编辑远端 | [y] 复制 | [v] 粘贴 | [M] 移动 | [n] 新建目录 | [x] 删除 | [r] 重命名 | [u] 上传 | [m] 切换时间 | [d] 下载 | [=] 对比 | [R] 刷新 | [t] 任务",
 	textFooterTaskCenter:        "[j/k] 移动 | [p] 暂停 | [r] 继续 | [x] 取消任务 | [D] 草稿重试 | [R] 刷新 | [t]/[q]/[Esc] 返回",
 }
 
@@ -382,9 +382,9 @@ func enText(key string) string {
 	case textFooterCreateDir:
 		return "[Enter] Create Directory | [Esc] Cancel"
 	case textFooterFileSingle:
-		return "[/] Search | [b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
+		return "[/] Search | [b] Show Local | [q] SSH Panel | [Enter] Open | [Space] Select | [E] Edit | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [m] Toggle Time | [d] Download | [R] Refresh | [t] Tasks"
 	case textFooterFileSplit:
-		return "[/] Search | [Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [=] Compare | [R] Refresh | [t] Tasks"
+		return "[/] Search | [Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [E] Edit Remote | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [=] Compare | [R] Refresh | [t] Tasks"
 	case textFooterTaskCenter:
 		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [D] Drafts | [R] Refresh | [t]/[q]/[Esc] Back"
 	default:

@@ -245,6 +245,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modalKind = modalCompareResult
 		m.compareResult = msg.result
 		m.state = app.StateConfirmModal
+	case remoteEditPreparedMsg:
+		if msg.err != nil {
+			m.err = displayError(msg.err)
+			return m, nil
+		}
+		m.status = fmt.Sprintf("Editing remote draft %s.", msg.draft.RemotePath)
+		return m, m.openRemoteDraftEditorCmd(msg.draft)
+	case remoteEditFinishedMsg:
+		if msg.err != nil {
+			failed := markDraftFailed(msg.draft)
+			if err := m.store.UpsertDraft(failed); err != nil {
+				m.err = err.Error()
+				return m, nil
+			}
+			m.err = fmt.Sprintf("editor failed: %v; draft saved for retry", msg.err)
+			if f, err := m.store.LoadDrafts(); err == nil {
+				m.drafts = f.Drafts
+			}
+			return m, nil
+		}
+		return m, m.syncRemoteEditDraftCmd(msg.draft)
 	case transferStartedMsg:
 		if msg.err != nil {
 			m.err = msg.err.Error()
@@ -1226,6 +1247,16 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.startDownloadCmd(false, nil)
 	case "=":
 		return m, m.compareFilesCmd()
+	case "E":
+		if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 {
+			m.err = "remote edit failed: focus the remote pane"
+			return m, nil
+		}
+		if len(files) == 0 || cursor >= len(files) {
+			m.err = "remote edit failed: no remote file selected"
+			return m, nil
+		}
+		return m, m.prepareRemoteEditCmd(files[cursor])
 	case "m":
 		m.showFileTime = !m.showFileTime
 	case "R":

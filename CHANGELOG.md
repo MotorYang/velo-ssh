@@ -16,3 +16,4 @@
 - Added `vssh copy <source-server>:<path> <target-server>:<path>` for cross-server remote file transfer.
 - Added multipart parallel upload resume with local chunk manifests for large files.
 - Fixed multipart resume to reuse a stable remote temporary file path across retries.
+- Added remote file edit flow with local drafts and automatic failed-upload retry records.

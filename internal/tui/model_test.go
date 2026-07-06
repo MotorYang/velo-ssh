@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1031,6 +1032,33 @@ func TestTaskCenterDraftRetryViewAndResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(f.Drafts) != 1 || f.Drafts[0].Status != config.DraftResolved {
+		t.Fatalf("drafts = %#v", f.Drafts)
+	}
+}
+
+func TestRemoteEditFailureStoresDraftForRetry(t *testing.T) {
+	store := config.NewStore(t.TempDir())
+	draft := config.Draft{
+		ID:         "draft-remote-edit",
+		ServerID:   "srv",
+		LocalPath:  filepath.Join(t.TempDir(), "draft.txt"),
+		RemotePath: "/etc/app.conf",
+		Status:     config.DraftPending,
+	}
+	if err := os.WriteFile(draft.LocalPath, []byte("changed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(app.StateFileManager, store, config.DefaultFile())
+	updated, _ := m.Update(remoteEditFinishedMsg{draft: draft, err: errors.New("editor failed")})
+	m = updated.(Model)
+	if !strings.Contains(m.err, "draft saved for retry") {
+		t.Fatalf("err = %q", m.err)
+	}
+	f, err := store.LoadDrafts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Drafts) != 1 || f.Drafts[0].Status != config.DraftFailed {
 		t.Fatalf("drafts = %#v", f.Drafts)
 	}
 }
