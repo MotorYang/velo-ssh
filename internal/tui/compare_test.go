@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/motoryang/velo-ssh/internal/app"
+	"github.com/motoryang/velo-ssh/internal/config"
 )
 
 func TestHashLocalFileUsesSHA256(t *testing.T) {
@@ -37,5 +41,30 @@ func TestUnifiedLineDiffShowsTextChanges(t *testing.T) {
 func TestLooksTextRejectsBinary(t *testing.T) {
 	if looksText([]byte{'a', 0, 'b'}) {
 		t.Fatal("binary data was treated as text")
+	}
+}
+
+func TestCompareResultCloseReturnsFileManager(t *testing.T) {
+	m := NewModel(app.StateConfirmModal, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.modalKind = modalCompareResult
+	m.compareResult = "Result: files differ."
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = updated.(Model)
+	if m.state != app.StateFileManager {
+		t.Fatalf("state = %s, want file manager", m.state)
+	}
+	if m.compareResult != "" {
+		t.Fatalf("compare result was not cleared")
+	}
+}
+
+func TestCompareProgressCancelReturnsFileManager(t *testing.T) {
+	m := NewModel(app.StateConfirmModal, config.NewStore(t.TempDir()), config.DefaultFile())
+	m.modalKind = modalCompareProgress
+	m.compareCancel = make(chan struct{})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.state != app.StateFileManager {
+		t.Fatalf("state = %s, want file manager", m.state)
 	}
 }

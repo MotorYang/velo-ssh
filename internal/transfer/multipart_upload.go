@@ -170,6 +170,7 @@ func AtomicMultipartUpload(client *sftp.Client, localPath, remotePath, taskID st
 	if err := client.Rename(tmpPath, remotePath); err != nil {
 		return err
 	}
+	_ = client.Remove(tmpPath)
 	_ = os.Remove(manifestPath)
 	return nil
 }

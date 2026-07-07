@@ -14,6 +14,10 @@
 - Added asynchronous server list online checks with latency display.
 - Added default `.vsshignore` exclusions for `.DS_Store`, `Thumbs.db`, and `.git/`.
 - Added AES-256-GCM encrypted backup export/import with passphrase support.
+- Fixed folder archive uploads to run as visible background tasks.
+- Fixed transfer completion refresh for file manager panes after uploads/downloads.
+- Fixed compare flow to show download progress, support cancellation, and return to File Manager.
+- Improved cleanup of temporary `.vssh.tmp` paths after successful transfers.
 
 ## v1.0.0.26070601
 

@@ -250,16 +250,8 @@ func (m Model) startUploadCmd(force bool, items []fileItem) tea.Cmd {
 			return transferStartedMsg{err: err}
 		}
 		if shouldArchiveFolderUpload(items) {
-			archiveCtx, archiveCancel := context.WithTimeout(context.Background(), 30*time.Minute)
-			defer archiveCancel()
-			if err := m.uploadFoldersAsArchives(archiveCtx, client, items); err != nil {
-				return transferStartedMsg{err: err}
-			}
-			remoteFiles, err := listRemoteFiles(client, m.remoteDir)
-			if err != nil {
-				return transferStartedMsg{err: err}
-			}
-			return filePanesLoadedMsg{local: m.localFiles, remote: remoteFiles}
+			m.startArchiveUploadTasks(client, items)
+			return transferStartedMsg{message: fmt.Sprintf("Started %d folder archive upload task(s).", len(items))}
 		}
 		plans, err := prepareUploadPlans(client, items, m.localDir, m.remoteDir)
 		if err != nil {
@@ -453,7 +445,29 @@ func shouldArchiveFolderUpload(items []fileItem) bool {
 	return true
 }
 
-func (m Model) uploadFoldersAsArchives(ctx context.Context, client *sftp.Client, items []fileItem) error {
+func (m Model) startArchiveUploadTasks(client *sftp.Client, items []fileItem) {
+	for _, item := range items {
+		task := transfer.NewTask(newTaskID("tar"), transfer.Upload, item.Path, path.Join(m.remoteDir, item.Name))
+		task.ServerID = m.activeServer.ID
+		m.tasks.Add(task)
+		go m.runArchiveUploadTask(context.Background(), client, item, task)
+	}
+}
+
+func (m Model) runArchiveUploadTask(ctx context.Context, client *sftp.Client, item fileItem, task *transfer.Task) {
+	task.MarkRunning()
+	if err := m.uploadFolderAsArchive(ctx, client, item, task); err != nil {
+		if task.IsCanceled() {
+			task.MarkCanceled(err)
+			return
+		}
+		task.MarkFailed(err)
+		return
+	}
+	task.MarkSucceeded()
+}
+
+func (m Model) uploadFolderAsArchive(ctx context.Context, client *sftp.Client, item fileItem, task *transfer.Task) error {
 	if m.ssh == nil {
 		return fmt.Errorf("archive upload failed: ssh client is not connected")
 	}
@@ -461,28 +475,35 @@ func (m Model) uploadFoldersAsArchives(ctx context.Context, client *sftp.Client,
 	if err != nil {
 		return actionError("read .vsshignore", filepath.Join(m.localDir, ".vsshignore"), err)
 	}
-	for _, item := range items {
-		targetDir := path.Join(m.remoteDir, item.Name)
-		if err := ensureRemoteDir(client, targetDir, item.Mode); err != nil {
-			return actionError("create remote archive target directory", targetDir, err)
-		}
-		archivePath, err := createFolderArchive(item.Path, m.localDir, matcher)
-		if err != nil {
-			return actionError("create tar.gz archive", item.Path, err)
-		}
-		defer os.Remove(archivePath)
-		taskID := newTaskID("tar")
-		remoteArchive := path.Join(m.remoteDir, fmt.Sprintf(".%s.vssh.tar.gz.%s", item.Name, taskID))
-		if err := transfer.AtomicUpload(client, archivePath, remoteArchive, taskID, nil, nil, nil, nil); err != nil {
-			return actionError("upload tar.gz archive", remoteArchive, err)
-		}
-		command := "tar -xzf " + shellQuote(remoteArchive) + " -C " + shellQuote(targetDir) + " && rm -f " + shellQuote(remoteArchive)
-		if err := m.ssh.RunCommand(ctx, command); err != nil {
-			_ = client.Remove(remoteArchive)
-			return actionError("extract remote tar.gz archive", targetDir, err)
-		}
+	targetDir := task.Snapshot().TargetPath
+	if err := ensureRemoteDir(client, targetDir, item.Mode); err != nil {
+		return actionError("create remote archive target directory", targetDir, err)
+	}
+	archivePath, err := createFolderArchive(item.Path, m.localDir, matcher)
+	if err != nil {
+		return actionError("create tar.gz archive", item.Path, err)
+	}
+	defer os.Remove(archivePath)
+	if info, err := os.Stat(archivePath); err == nil {
+		task.SetProgress(0, info.Size())
+	}
+	remoteArchive := path.Join(m.remoteDir, fmt.Sprintf(".%s.vssh.tar.gz.%s", item.Name, task.ID))
+	progress := func(done, total int64) {
+		task.SetProgress(done, total)
+	}
+	if err := transfer.AtomicUpload(client, archivePath, remoteArchive, task.ID, progress, task.SetTempPath, taskCancelChan(task), task.WaitIfPaused); err != nil {
+		return actionError("upload tar.gz archive", remoteArchive, err)
+	}
+	command := "tar -xzf " + shellQuote(remoteArchive) + " -C " + shellQuote(targetDir) + " && rm -f " + shellQuote(remoteArchive)
+	if err := m.ssh.RunCommand(ctx, command); err != nil {
+		_ = client.Remove(remoteArchive)
+		return actionError("extract remote tar.gz archive", targetDir, err)
 	}
 	return nil
+}
+
+func taskCancelChan(task *transfer.Task) <-chan struct{} {
+	return task.CancelChan()
 }
 
 func createFolderArchive(sourceDir, localRoot string, matcher ignore.Matcher) (string, error) {

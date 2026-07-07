@@ -101,6 +101,9 @@ type Model struct {
 	updateProgress        updater.Progress
 	updateInstallCh       chan updateInstallMsg
 	compareResult         string
+	compareProgress       updater.Progress
+	compareCancel         chan struct{}
+	compareCh             chan compareProgressMsg
 	clipboardFiles        []fileItem
 	clipboardRemote       bool
 }
@@ -257,12 +260,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case compareResultMsg:
 		if msg.err != nil {
 			m.err = displayError(msg.err)
+			m.clearCompare()
+			m.state = app.StateFileManager
 			return m, nil
 		}
-		m.previous = m.state
 		m.modalKind = modalCompareResult
 		m.compareResult = msg.result
 		m.state = app.StateConfirmModal
+	case compareProgressMsg:
+		if msg.done {
+			if msg.err != nil {
+				m.err = displayError(msg.err)
+				m.clearCompare()
+				m.state = app.StateFileManager
+				return m, nil
+			}
+			m.modalKind = modalCompareResult
+			m.compareResult = msg.result
+			m.state = app.StateConfirmModal
+			return m, nil
+		}
+		m.compareProgress = msg.progress
+		m.modalKind = modalCompareProgress
+		m.state = app.StateConfirmModal
+		return m, waitCompareCmd(m.compareCh)
 	case remoteEditPreparedMsg:
 		if msg.err != nil {
 			m.err = displayError(msg.err)
@@ -567,7 +588,7 @@ func (m *Model) handleTaskTick() (tea.Cmd, bool) {
 			m.completedTasks[task.ID] = true
 		}
 	}
-	if refresh && m.state == app.StateFileManager {
+	if refresh && (m.state == app.StateFileManager || m.previous == app.StateFileManager) {
 		return m.refreshFilePanesCmd(), active
 	}
 	return nil, active
@@ -860,8 +881,21 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case keyEsc, keyEnter, "q", "Q", "n", "N":
 			m.modalKind = ""
-			m.compareResult = ""
-			m.state = m.previous
+			m.clearCompare()
+			m.state = app.StateFileManager
+		}
+		return m, nil
+	}
+	if m.modalKind == modalCompareProgress {
+		switch msg.String() {
+		case keyEsc, "q", "Q", "n", "N":
+			if m.compareCancel != nil {
+				close(m.compareCancel)
+				m.compareCancel = nil
+			}
+			m.status = "Compare canceled."
+			m.clearCompare()
+			m.state = app.StateFileManager
 		}
 		return m, nil
 	}
@@ -1264,7 +1298,7 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		return m, m.startDownloadCmd(false, nil)
 	case "=":
-		return m, m.compareFilesCmd()
+		return m.startCompareFromSelection(files, cursor)
 	case "E":
 		if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 {
 			m.err = "remote edit failed: focus the remote pane"

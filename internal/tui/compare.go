@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/motoryang/velo-ssh/internal/app"
 	"github.com/motoryang/velo-ssh/internal/config"
+	"github.com/motoryang/velo-ssh/internal/transfer"
+	"github.com/motoryang/velo-ssh/internal/updater"
 	"github.com/pkg/sftp"
 )
 
@@ -21,31 +25,91 @@ const (
 	maxTextDiffLines = 120
 )
 
-func (m Model) compareFilesCmd() tea.Cmd {
-	return func() tea.Msg {
-		if m.config.Settings.DefaultViewMode != config.ViewSplit {
-			return compareResultMsg{err: fmt.Errorf("compare failed: show the local pane first with [b]")}
-		}
-		if m.ssh == nil {
-			return compareResultMsg{err: fmt.Errorf("compare failed: ssh client is not connected")}
-		}
-		localItems := selectedFileItems(filteredFileItems(m.localFiles, m.localFileFilter), m.localCursor)
-		remoteItems := selectedFileItems(filteredFileItems(m.remoteFiles, m.remoteFileFilter), m.remoteCursor)
-		if len(localItems) != 1 || len(remoteItems) != 1 {
-			return compareResultMsg{err: fmt.Errorf("compare failed: select exactly one local file and one remote file")}
-		}
-		if localItems[0].Name == ".." || remoteItems[0].Name == ".." {
-			return compareResultMsg{err: fmt.Errorf("compare failed: parent directory entries cannot be compared")}
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		client, err := m.ssh.OpenSFTP(ctx)
-		if err != nil {
-			return compareResultMsg{err: err}
-		}
-		result, err := compareLocalRemoteFiles(client, localItems[0], remoteItems[0])
-		return compareResultMsg{result: result, err: err}
+type compareProgressMsg struct {
+	progress updater.Progress
+	result   string
+	done     bool
+	err      error
+}
+
+func (m Model) startCompareFromSelection(files []fileItem, cursor int) (tea.Model, tea.Cmd) {
+	if m.config.Settings.DefaultViewMode != config.ViewSplit {
+		m.err = "compare failed: show the local pane first with [b]"
+		return m, nil
 	}
+	if m.ssh == nil {
+		m.err = "compare failed: ssh client is not connected"
+		return m, nil
+	}
+	localItems := selectedFileItems(filteredFileItems(m.localFiles, m.localFileFilter), m.localCursor)
+	remoteItems := selectedFileItems(filteredFileItems(m.remoteFiles, m.remoteFileFilter), m.remoteCursor)
+	if len(localItems) != 1 || len(remoteItems) != 1 {
+		m.err = "compare failed: select exactly one local file and one remote file"
+		return m, nil
+	}
+	if localItems[0].Name == ".." || remoteItems[0].Name == ".." || localItems[0].IsDir || remoteItems[0].IsDir {
+		m.err = "compare failed: select one local file and one remote file, not directories"
+		return m, nil
+	}
+	m.previous = app.StateFileManager
+	m.modalKind = modalCompareProgress
+	m.compareProgress = updater.Progress{Stage: "downloading"}
+	m.compareCancel = make(chan struct{})
+	m.compareCh = make(chan compareProgressMsg, 16)
+	m.state = app.StateConfirmModal
+	return m, startCompareCmd(m.ssh, localItems[0], remoteItems[0], m.compareCancel, m.compareCh)
+}
+
+func startCompareCmd(sshClient interface {
+	OpenSFTP(context.Context) (*sftp.Client, error)
+}, local fileItem, remote fileItem, canceled <-chan struct{}, ch chan compareProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			client, err := sshClient.OpenSFTP(ctx)
+			if err != nil {
+				sendCompareDone(ch, canceled, compareProgressMsg{done: true, err: err})
+				return
+			}
+			result, err := compareLocalRemoteFilesWithDownload(client, local, remote, canceled, func(done, total int64) {
+				sendCompareMsg(ch, compareProgressMsg{progress: updater.Progress{Stage: "downloading", Downloaded: done, Total: total}})
+			})
+			sendCompareDone(ch, canceled, compareProgressMsg{result: result, done: true, err: err})
+		}()
+		return <-ch
+	}
+}
+
+func sendCompareMsg(ch chan compareProgressMsg, msg compareProgressMsg) {
+	select {
+	case ch <- msg:
+	default:
+	}
+}
+
+func sendCompareDone(ch chan compareProgressMsg, canceled <-chan struct{}, msg compareProgressMsg) {
+	select {
+	case <-canceled:
+		return
+	case ch <- msg:
+	}
+}
+
+func waitCompareCmd(ch chan compareProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		if ch == nil {
+			return nil
+		}
+		return <-ch
+	}
+}
+
+func (m *Model) clearCompare() {
+	m.compareResult = ""
+	m.compareProgress = updater.Progress{}
+	m.compareCh = nil
+	m.compareCancel = nil
 }
 
 func compareLocalRemoteFiles(client *sftp.Client, local fileItem, remote fileItem) (string, error) {
@@ -73,6 +137,51 @@ func compareLocalRemoteFiles(client *sftp.Client, local fileItem, remote fileIte
 	}
 	b.WriteString("Result: files differ.")
 	diff, ok, err := textDiff(client, local.Path, remote.Path)
+	if err != nil {
+		fmt.Fprintf(&b, "\n\nText diff unavailable: %v", err)
+		return b.String(), nil
+	}
+	if ok {
+		fmt.Fprintf(&b, "\n\n%s", diff)
+	}
+	return b.String(), nil
+}
+
+func compareLocalRemoteFilesWithDownload(client *sftp.Client, local fileItem, remote fileItem, canceled <-chan struct{}, progress func(done, total int64)) (string, error) {
+	tmpDir, err := os.MkdirTemp("", "velossh-compare-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmpDir)
+	tmpPath := filepath.Join(tmpDir, filepath.Base(remote.Path))
+	if err := transfer.AtomicDownload(client, remote.Path, tmpPath, "compare", progress, nil, canceled, nil); err != nil {
+		return "", err
+	}
+	return compareLocalFiles(local.Path, tmpPath, local.Path, remote.Path)
+}
+
+func compareLocalFiles(localPath, downloadedPath, localLabel, remoteLabel string) (string, error) {
+	localHash, localSize, err := hashLocalFile(localPath)
+	if err != nil {
+		return "", actionError("hash local file", localPath, err)
+	}
+	remoteHash, remoteSize, err := hashLocalFile(downloadedPath)
+	if err != nil {
+		return "", actionError("hash downloaded remote file", downloadedPath, err)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Local: %s\n", localLabel)
+	fmt.Fprintf(&b, "Remote: %s\n\n", remoteLabel)
+	fmt.Fprintf(&b, "Local SHA-256:  %s\n", localHash)
+	fmt.Fprintf(&b, "Remote SHA-256: %s\n", remoteHash)
+	fmt.Fprintf(&b, "Local size:  %s\n", humanBytes(localSize))
+	fmt.Fprintf(&b, "Remote size: %s\n\n", humanBytes(remoteSize))
+	if localHash == remoteHash {
+		b.WriteString("Result: files are identical.")
+		return b.String(), nil
+	}
+	b.WriteString("Result: files differ.")
+	diff, ok, err := textDiffLocal(localPath, downloadedPath, localLabel, remoteLabel)
 	if err != nil {
 		fmt.Fprintf(&b, "\n\nText diff unavailable: %v", err)
 		return b.String(), nil
@@ -127,6 +236,19 @@ func textDiff(client *sftp.Client, localPath, remotePath string) (string, bool, 
 		return "", false, err
 	}
 	diff := unifiedLineDiff(localPath, remotePath, splitLines(localData), splitLines(remoteData), maxTextDiffLines)
+	return diff, true, nil
+}
+
+func textDiffLocal(localPath, downloadedPath, localLabel, remoteLabel string) (string, bool, error) {
+	localData, localText, err := readSmallLocalText(localPath)
+	if err != nil || !localText {
+		return "", false, err
+	}
+	remoteData, remoteText, err := readSmallLocalText(downloadedPath)
+	if err != nil || !remoteText {
+		return "", false, err
+	}
+	diff := unifiedLineDiff(localLabel, remoteLabel, splitLines(localData), splitLines(remoteData), maxTextDiffLines)
 	return diff, true, nil
 }
 

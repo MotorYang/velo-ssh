@@ -18,6 +18,7 @@ const (
 	modalUpdateAvailable   = "update_available"
 	modalUpdateInstalling  = "update_installing"
 	modalCompareResult     = "compare_result"
+	modalCompareProgress   = "compare_progress"
 
 	hostKeyActionShell       = "shell"
 	hostKeyActionFileManager = "file_manager"
@@ -159,7 +160,24 @@ func (m Model) viewCompareResult() string {
 	return m.viewModal(m.tr(textCompareResultPrompt) + "\n\n" + m.compareResult + "\n\n" + m.tr(textCompareCloseAction))
 }
 
+func (m Model) viewCompareProgress() string {
+	progress := m.compareProgress
+	ratio := float64(0)
+	detail := "Preparing"
+	if progress.Total > 0 {
+		ratio = float64(progress.Downloaded) / float64(progress.Total)
+		if ratio > 1 {
+			ratio = 1
+		}
+		detail = "Downloading remote file " + humanBytes(progress.Downloaded) + "/" + humanBytes(progress.Total)
+	}
+	return m.viewModal("Comparing files\n\n" + detail + "\n\n" + renderProgressBar(44, ratio) + "\n\n[Esc]/[q] Cancel")
+}
+
 func (m Model) viewConfirmModal() string {
+	if m.modalKind == modalCompareProgress {
+		return m.viewCompareProgress()
+	}
 	if m.modalKind == modalCompareResult {
 		return m.viewCompareResult()
 	}

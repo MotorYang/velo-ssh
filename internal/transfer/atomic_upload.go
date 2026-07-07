@@ -100,6 +100,7 @@ func AtomicUpload(client *sftp.Client, localPath, remotePath, taskID string, pro
 	if err := client.Rename(tmpPath, remotePath); err != nil {
 		return err
 	}
+	_ = client.Remove(tmpPath)
 	cleanup = false
 	return nil
 }
@@ -179,6 +180,7 @@ func AtomicDownload(client *sftp.Client, remotePath, localPath, taskID string, p
 	if err := os.Rename(tmpPath, localPath); err != nil {
 		return err
 	}
+	_ = os.Remove(tmpPath)
 	cleanup = false
 	return nil
 }
@@ -225,6 +227,7 @@ func AtomicRemoteCopy(sourceClient *sftp.Client, targetClient *sftp.Client, sour
 	if err := targetClient.Rename(tmpPath, targetPath); err != nil {
 		return err
 	}
+	_ = targetClient.Remove(tmpPath)
 	cleanup = false
 	return nil
 }

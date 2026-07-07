@@ -146,6 +146,22 @@ func (t *Task) IsFinished() bool {
 	return t.Status == TaskSucceeded || t.Status == TaskFailed || t.Status == TaskCanceled
 }
 
+func (t *Task) MarkRunning() {
+	t.mark(TaskRunning, nil)
+}
+
+func (t *Task) MarkSucceeded() {
+	t.mark(TaskSucceeded, nil)
+}
+
+func (t *Task) MarkFailed(err error) {
+	t.mark(TaskFailed, err)
+}
+
+func (t *Task) MarkCanceled(err error) {
+	t.mark(TaskCanceled, err)
+}
+
 func (t *Task) Cancel() {
 	t.mu.Lock()
 	cancel := t.cancel
@@ -157,6 +173,12 @@ func (t *Task) Cancel() {
 	default:
 		close(cancel)
 	}
+}
+
+func (t *Task) CancelChan() <-chan struct{} {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.cancel
 }
 
 func (t *Task) mark(status Status, err error) {
