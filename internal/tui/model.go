@@ -100,6 +100,7 @@ type Model struct {
 	pendingUpdate         updater.Release
 	updateProgress        updater.Progress
 	updateInstallCh       chan updateInstallMsg
+	updateInstallCancel   context.CancelFunc
 	compareResult         string
 	compareProgress       updater.Progress
 	compareCancel         chan struct{}
@@ -875,7 +876,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleUpdateAvailableConfirmKey(msg)
 	}
 	if m.modalKind == modalUpdateInstalling {
-		return m, nil
+		return m.handleUpdateInstallingConfirmKey(msg)
 	}
 	if m.modalKind == modalCompareResult {
 		switch msg.String() {
@@ -958,7 +959,20 @@ func (m Model) handleUpdateAvailableConfirmKey(msg tea.KeyMsg) (tea.Model, tea.C
 		m.updateProgress = updater.Progress{Stage: "selecting"}
 		m.updateInstallCh = make(chan updateInstallMsg, 16)
 		m.state = app.StateConfirmModal
-		return m, startUpdateInstallCmd(m.pendingUpdate, m.updateInstallCh)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		m.updateInstallCancel = cancel
+		return m, startUpdateInstallCmd(ctx, m.pendingUpdate, m.updateInstallCh)
+	}
+	return m, nil
+}
+
+func (m Model) handleUpdateInstallingConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEsc, "n", "N":
+		m.status = m.tr(textUpdateCanceled)
+		m.clearUpdatePrompt()
+		m.state = m.previous
 	}
 	return m, nil
 }
@@ -967,6 +981,10 @@ func (m *Model) clearUpdatePrompt() {
 	m.modalKind = ""
 	m.pendingUpdate = updater.Release{}
 	m.updateProgress = updater.Progress{}
+	if m.updateInstallCancel != nil {
+		m.updateInstallCancel()
+		m.updateInstallCancel = nil
+	}
 }
 
 func (m Model) handleOverwriteConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -1432,15 +1450,24 @@ func (m Model) startDraftRetryCmd(task *transfer.Task, draftID string) tea.Cmd {
 	}
 }
 
-func startUpdateInstallCmd(rel updater.Release, ch chan updateInstallMsg) tea.Cmd {
+func startUpdateInstallCmd(ctx context.Context, rel updater.Release, ch chan updateInstallMsg) tea.Cmd {
 	return func() tea.Msg {
 		go func() {
-			err := updater.InstallLatestWithProgress(context.Background(), rel, func(progress updater.Progress) {
+			err := updater.InstallLatestWithProgress(ctx, rel, func(progress updater.Progress) {
+				if ctx.Err() != nil {
+					return
+				}
 				ch <- updateInstallMsg{progress: progress}
 			})
 			ch <- updateInstallMsg{done: true, err: err}
 		}()
-		return <-ch
+
+		select {
+		case msg := <-ch:
+			return msg
+		case <-ctx.Done():
+			return updateInstallMsg{done: true, err: ctx.Err()}
+		}
 	}
 }
 

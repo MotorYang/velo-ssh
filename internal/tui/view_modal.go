@@ -152,7 +152,8 @@ func (m Model) viewUpdateInstalling() string {
 		m.tr(textUpdateInstallingPrompt) + "\n\n" +
 			m.tr(textUpdateLatest) + ": " + m.pendingUpdate.Version + "\n" +
 			detail + "\n\n" +
-			renderProgressBar(barWidth, ratio),
+			renderProgressBar(barWidth, ratio) + "\n\n" +
+			m.tr(textUpdateCancelAction),
 	)
 }
 

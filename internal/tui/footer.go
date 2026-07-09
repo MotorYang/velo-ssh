@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/motoryang/velo-ssh/internal/app"
-	"github.com/motoryang/velo-ssh/internal/config"
 	"github.com/motoryang/velo-ssh/internal/term"
 )
 
@@ -99,15 +98,15 @@ func (m Model) helpText() string {
 		return m.tr(textFooterFileSplit)
 	case app.StateTaskCenter:
 		if m.taskDraftMode {
-			if m.config.Settings.Language == config.LanguageSimplifiedChinese {
-				return "[j/k] 移动 | [r] 重试草稿 | [x] 标记已解决 | [R] 刷新 | [D]/[q]/[Esc] 任务"
-			}
-			return "[j/k] Move | [r] Retry Draft | [x] Resolve Draft | [R] Refresh | [D]/[q]/[Esc] Tasks"
+			return m.tr(textFooterStateTaskCenter)
 		}
 		return m.tr(textFooterTaskCenter)
 	case app.StateConfirmModal:
 		if m.modalKind == modalUpdateAvailable {
 			return m.tr(textUpdateAction) + " | " + m.tr(textFooterCancel) + " | " + m.tr(textSkipUpdateAction)
+		}
+		if m.modalKind == modalUpdateInstalling {
+			return m.tr(textUpdateCancelAction)
 		}
 		if m.modalKind == modalHostKey {
 			return m.tr(textTrustAndRetry)
@@ -126,7 +125,7 @@ func (m Model) helpText() string {
 		}
 		return m.tr(textFooterConfirm)
 	case app.StateShell:
-		return "[Enter]/[o] Open Shell | [Esc] Server List"
+		return m.tr(textFooterStateShell)
 	case app.StateHelp:
 		return m.tr(textFooterBack)
 	default:

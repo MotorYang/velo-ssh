@@ -81,6 +81,7 @@ const (
 	textUpdateBody              = "update.body"
 	textUpdateAction            = "update.action"
 	textSkipUpdateAction        = "update.skip"
+	textUpdateCancelAction      = "update.cancleAction"
 	textUpdateCanceled          = "update.canceled"
 	textUpdateSkipped           = "update.skipped"
 	textUpdateInstallFailed     = "update.installFailed"
@@ -95,6 +96,8 @@ const (
 	textFooterFileSingle        = "footer.file.single"
 	textFooterFileSplit         = "footer.file.split"
 	textFooterTaskCenter        = "footer.taskCenter"
+	textFooterStateShell        = "footer.stateShell"
+	textFooterStateTaskCenter   = "footer.stateTaskCenter"
 )
 
 var zhText = map[string]string{
@@ -176,6 +179,7 @@ var zhText = map[string]string{
 	textUpdateBody:              "选择更新会自动下载并安装适用于当前平台的 Release 产物。",
 	textUpdateAction:            "[Enter]/[u] 下载并安装",
 	textSkipUpdateAction:        "[s] 跳过本次版本",
+	textUpdateCancelAction:      "[n] 取消下载",
 	textUpdateCanceled:          "已取消本次更新。",
 	textUpdateSkipped:           "已跳过版本 %s。",
 	textUpdateInstallFailed:     "安装更新失败：%v",
@@ -190,6 +194,8 @@ var zhText = map[string]string{
 	textFooterFileSingle:        "[/] 搜索 | [b] 显示本地 | [q] SSH 面板 | [Enter] 打开 | [Space] 选择 | [E] 编辑 | [y] 复制 | [v] 粘贴 | [M] 移动 | [n] 新建目录 | [x] 删除 | [r] 重命名 | [m] 切换时间 | [d] 下载 | [R] 刷新 | [t] 任务",
 	textFooterFileSplit:         "[/] 搜索 | [Tab] 面板 | [b] 隐藏本地 | [q] SSH 面板 | [Enter] 打开 | [Space] 选择 | [a] 全选 | [c] 清空 | [E] 编辑远端 | [y] 复制 | [v] 粘贴 | [M] 移动 | [n] 新建目录 | [x] 删除 | [r] 重命名 | [u] 上传 | [m] 切换时间 | [d] 下载 | [=] 对比 | [R] 刷新 | [t] 任务",
 	textFooterTaskCenter:        "[j/k] 移动 | [p] 暂停 | [r] 继续 | [x] 取消任务 | [D] 草稿重试 | [R] 刷新 | [t]/[q]/[Esc] 返回",
+	textFooterStateTaskCenter:   "[j/k] 移动 | [r] 重试草稿 | [x] 标记已解决 | [R] 刷新 | [D]/[q]/[Esc] 任务",
+	textFooterStateShell:        "[Enter]/[o] 打开Shell | [Esc] 返回服务器列表",
 }
 
 func (m Model) tr(key string) string {
@@ -359,6 +365,8 @@ func enText(key string) string {
 		return "[Enter]/[u] Download and Install"
 	case textSkipUpdateAction:
 		return "[s] Skip this version"
+	case textUpdateCancelAction:
+		return "[n] Cancel"
 	case textUpdateCanceled:
 		return "Update canceled."
 	case textUpdateSkipped:
@@ -387,6 +395,10 @@ func enText(key string) string {
 		return "[/] Search | [Tab] Pane | [b] Hide Local | [q] SSH Panel | [Enter] Open | [Space] Select | [a] All | [c] Clear | [E] Edit Remote | [y] Copy | [v] Paste | [M] Move | [n] New Dir | [x] Delete | [r] Rename | [u] Upload | [m] Toggle Time | [d] Download | [=] Compare | [R] Refresh | [t] Tasks"
 	case textFooterTaskCenter:
 		return "[j/k] Move | [p] Pause | [r] Resume | [x] Cancel Task | [D] Drafts | [R] Refresh | [t]/[q]/[Esc] Back"
+	case textFooterStateShell:
+		return "[Enter]/[o] Open Shell | [Esc] Server List"
+	case textFooterStateTaskCenter:
+		return "[j/k] Move | [r] Retry Draft | [x] Resolve Draft | [R] Refresh | [D]/[q]/[Esc] Tasks"
 	default:
 		return key
 	}
