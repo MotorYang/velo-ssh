@@ -1,5 +1,7 @@
 # Changelog
 
+- Added support cancelling in-progress updates
+
 ## v1.1.1.26070701
 
 - Fixed folder archive uploads to run as visible background tasks.
