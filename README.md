@@ -5,7 +5,6 @@
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/motoryang/velo-ssh?logo=github)](https://github.com/motoryang/velo-ssh/releases)
-[![Website](https://img.shields.io/badge/Website-000000?logo=githubpages)](https://motoryang.github.io/velo-ssh/)
 
 **A lightweight TUI-based SSH manager and dual-pane SFTP file transfer tool**
 
