@@ -9,6 +9,7 @@
 - Fixed compare flow to show download progress, support cancellation, and return to File Manager.
 - Improved cleanup of temporary `.vssh.tmp` paths after successful transfers.
 - Fixed SSH Manager navigation so `j/k` and arrow keys follow the grouped visible server order.
+- Fixed SSH Shell pasted commands with URL colons so bracketed paste input is forwarded in order.
 
 ## v1.1.0.26070601
 

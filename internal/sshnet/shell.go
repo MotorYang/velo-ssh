@@ -235,7 +235,7 @@ func runShellInputWithHelp(in io.Reader, remote io.Writer, errOut io.Writer, onL
 				}
 				continue
 			}
-			if b == ':' {
+			if b == ':' && remoteLine == "" {
 				capturing = true
 				candidate = ":"
 				echoLocalCapture(errOut, b)
@@ -248,6 +248,10 @@ func runShellInputWithHelp(in io.Reader, remote io.Writer, errOut io.Writer, onL
 				continue
 			}
 			_, _ = remote.Write([]byte{b})
+			if isLineResetControl(b) {
+				remoteLine = ""
+				continue
+			}
 			if isBackspace(b) {
 				if len(remoteLine) > 0 {
 					remoteLine = remoteLine[:len(remoteLine)-1]
@@ -298,6 +302,10 @@ func isLineBreak(b byte) bool {
 
 func isBackspace(b byte) bool {
 	return b == 0x7f || b == 0x08
+}
+
+func isLineResetControl(b byte) bool {
+	return b == 0x03 || b == 0x15
 }
 
 func echoLocalCapture(w io.Writer, b byte) {

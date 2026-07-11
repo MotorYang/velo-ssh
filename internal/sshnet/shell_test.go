@@ -59,23 +59,19 @@ func TestShellInputPassesOrdinaryColonCommands(t *testing.T) {
 	}
 }
 
-func TestShellInputInterceptsVSSHWhenLocalLineStateDrifts(t *testing.T) {
+func TestShellInputDoesNotInterceptVSSHInMiddleOfLine(t *testing.T) {
 	var remote bytes.Buffer
-	var got EscapeResult
 	localExit, err := runShellInput(strings.NewReader("stale-local-state:vssh files\n"), &remote, &bytes.Buffer{}, func(res EscapeResult) {
-		got = res
+		t.Fatalf("unexpected local command: %+v", res)
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !localExit {
-		t.Fatal("expected :vssh command to be intercepted even when local state drifted")
+	if localExit {
+		t.Fatal("mid-line :vssh should not exit shell")
 	}
-	if got.Command != "files" {
-		t.Fatalf("local command = %q, want files", got.Command)
-	}
-	if remote.String() != "stale-local-state" {
-		t.Fatalf("remote got %q, want prefix before local command", remote.String())
+	if remote.String() != "stale-local-state:vssh files\n" {
+		t.Fatalf("remote got %q, want full input", remote.String())
 	}
 }
 
@@ -151,6 +147,23 @@ func TestShellInputLocalCommandWithBracketedPasteMarkers(t *testing.T) {
 	}
 	if remote.String() != "" {
 		t.Fatalf("remote got %q, want empty", remote.String())
+	}
+}
+
+func TestShellInputPastedURLColonPassesThroughInOrder(t *testing.T) {
+	input := "wget -P /root -N --no-check-certificate \"https://raw.githubusercontent.com/mack-a/v2ray-agent/master/install.sh\" && chmod 700 /root/install.sh && /root/install.sh"
+	var remote bytes.Buffer
+	localExit, err := runShellInput(strings.NewReader("\x1b[200~"+input+"\x1b[201~\n"), &remote, &bytes.Buffer{}, func(res EscapeResult) {
+		t.Fatalf("unexpected local command: %+v", res)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if localExit {
+		t.Fatal("pasted wget command should not exit shell")
+	}
+	if got := remote.String(); got != input+"\n" {
+		t.Fatalf("remote got %q, want pasted command in order", got)
 	}
 }
 
