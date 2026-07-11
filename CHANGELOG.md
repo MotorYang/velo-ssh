@@ -8,6 +8,7 @@
 - Fixed transfer completion refresh for file manager panes after uploads/downloads.
 - Fixed compare flow to show download progress, support cancellation, and return to File Manager.
 - Improved cleanup of temporary `.vssh.tmp` paths after successful transfers.
+- Fixed SSH Manager navigation so `j/k` and arrow keys follow the grouped visible server order.
 
 ## v1.1.0.26070601
 

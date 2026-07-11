@@ -105,6 +105,50 @@ func groupedServersByTag(servers []config.Server) (map[string][]groupedServerIte
 	return groups, names
 }
 
+func visibleServerCursors(servers []config.Server) []int {
+	groups, names := groupedServersByTag(servers)
+	cursors := make([]int, 0, len(servers))
+	for _, name := range names {
+		for _, item := range groups[name] {
+			cursors = append(cursors, item.index)
+		}
+	}
+	return cursors
+}
+
+func previousVisibleServerCursor(servers []config.Server, cursor int) int {
+	visible := visibleServerCursors(servers)
+	if len(visible) == 0 {
+		return 0
+	}
+	pos := visibleServerCursorPosition(visible, cursor)
+	if pos <= 0 {
+		return visible[0]
+	}
+	return visible[pos-1]
+}
+
+func nextVisibleServerCursor(servers []config.Server, cursor int) int {
+	visible := visibleServerCursors(servers)
+	if len(visible) == 0 {
+		return 0
+	}
+	pos := visibleServerCursorPosition(visible, cursor)
+	if pos >= len(visible)-1 {
+		return visible[len(visible)-1]
+	}
+	return visible[pos+1]
+}
+
+func visibleServerCursorPosition(visible []int, cursor int) int {
+	for i, value := range visible {
+		if value == cursor {
+			return i
+		}
+	}
+	return 0
+}
+
 func serverTags(srv config.Server) []string {
 	tags := []string{}
 	seen := map[string]bool{}

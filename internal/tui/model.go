@@ -621,14 +621,10 @@ func (m Model) handleServerListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	servers := m.filteredServers()
 	switch msg.String() {
-	case "k", keyDown:
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "j", keyUp:
-		if m.cursor < len(servers)-1 {
-			m.cursor++
-		}
+	case "k", keyUp:
+		m.cursor = previousVisibleServerCursor(servers, m.cursor)
+	case "j", keyDown:
+		m.cursor = nextVisibleServerCursor(servers, m.cursor)
 	case "/":
 		m.searching = true
 		m.searchInput.Focus()

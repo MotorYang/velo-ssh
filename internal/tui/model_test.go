@@ -106,18 +106,47 @@ func TestServerListArrowKeysUseExpectedDirection(t *testing.T) {
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if m.cursor != 0 {
-		t.Fatalf("cursor after down = %d, want 0", m.cursor)
+	if m.cursor != 1 {
+		t.Fatalf("cursor after down = %d, want 1", m.cursor)
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = updated.(Model)
-	if m.cursor != 1 {
-		t.Fatalf("cursor after up = %d, want 1", m.cursor)
+	if m.cursor != 0 {
+		t.Fatalf("cursor after up = %d, want 0", m.cursor)
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	m = updated.(Model)
 	if m.cursor != 0 {
 		t.Fatalf("cursor after k = %d, want 0", m.cursor)
+	}
+}
+
+func TestServerListNavigationFollowsGroupedVisualOrder(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Servers = []config.Server{
+		{ID: "default", Name: "Default", Env: "dev", Host: "127.0.0.1", Port: 22, User: "root", AuthType: config.AuthAgent},
+		{ID: "singapore", Name: "Singapore", Env: "vps", Host: "47.82.157.11", Port: 22, User: "root", AuthType: config.AuthAgent, Tags: []string{"新加坡"}},
+		{ID: "mainland", Name: "Mainland", Env: "dev", Host: "43.228.79.121", Port: 29633, User: "root", AuthType: config.AuthAgent, Tags: []string{"大陆"}},
+	}
+	m := NewModel(app.StateServerList, config.NewStore(t.TempDir()), cfg)
+	m.cursor = 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	if m.cursor != 2 {
+		t.Fatalf("cursor after down from default = %d, want mainland index 2", m.cursor)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	if m.cursor != 1 {
+		t.Fatalf("cursor after second down = %d, want singapore index 1", m.cursor)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(Model)
+	if m.cursor != 2 {
+		t.Fatalf("cursor after up = %d, want mainland index 2", m.cursor)
 	}
 }
 
