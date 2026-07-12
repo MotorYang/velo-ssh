@@ -1,7 +1,11 @@
 # Changelog
 
+## v1.2.0.26071201
+
 - Added support cancelling in-progress updates
 - Reworked install scripts into one-line Release binary installers for macOS, Linux, and Windows.
+- Fixed SSH Manager navigation so `j/k` and arrow keys follow the grouped visible server order.
+- Fixed SSH Shell pasted commands with URL colons so bracketed paste input is forwarded in order.
 - Fixed File Manager split-pane rendering so filters, column headers, and shortcut footer remain visible at minimum terminal sizes.
 - Fixed File Manager Enter behavior for regular files: local files open in the configured editor and remote files start the remote edit flow.
 - Fixed remote edit sync and upload overwrite finalization by using OpenSSH POSIX rename when replacing existing remote files.
@@ -12,8 +16,6 @@
 - Fixed transfer completion refresh for file manager panes after uploads/downloads.
 - Fixed compare flow to show download progress, support cancellation, and return to File Manager.
 - Improved cleanup of temporary `.vssh.tmp` paths after successful transfers.
-- Fixed SSH Manager navigation so `j/k` and arrow keys follow the grouped visible server order.
-- Fixed SSH Shell pasted commands with URL colons so bracketed paste input is forwarded in order.
 
 ## v1.1.0.26070601
 
