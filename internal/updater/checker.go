@@ -131,6 +131,11 @@ func InstallLatestWithProgress(ctx context.Context, rel Release, progress func(P
 	if err != nil {
 		return fmt.Errorf("install update: resolve current executable: %w", err)
 	}
+	if runtime.GOOS != "windows" {
+		if err := ensureInstallTargetWritable(exe, rel.Version); err != nil {
+			return err
+		}
+	}
 	tmpDir, err := os.MkdirTemp("", "velossh-update-*")
 	if err != nil {
 		return fmt.Errorf("install update: create temporary directory: %w", err)
@@ -330,6 +335,21 @@ func replaceExecutable(current, next string) error {
 	}
 	_ = os.Remove(backup)
 	return nil
+}
+
+func ensureInstallTargetWritable(current, version string) error {
+	dir := filepath.Dir(current)
+	probe, err := os.CreateTemp(dir, ".vssh-update-probe-*")
+	if err == nil {
+		name := probe.Name()
+		_ = probe.Close()
+		_ = os.Remove(name)
+		return nil
+	}
+	if os.IsPermission(err) {
+		return fmt.Errorf("install update: %s is not writable by the current user; update from a terminal with: VERSION=%s sh -c \"$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)\"", dir, version)
+	}
+	return fmt.Errorf("install update: check install target permissions: %w", err)
 }
 
 func scheduleWindowsReplace(current, next, tmpDir string) error {

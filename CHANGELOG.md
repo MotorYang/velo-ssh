@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.2.1.26071201
+- Improved update installation errors by checking install directory permissions before downloading and showing the one-line installer recovery command.
+
 ## v1.2.0.26071201
 
 - Added support cancelling in-progress updates
