@@ -1,32 +1,52 @@
 param(
+    [string]$Repo = "motoryang/velo-ssh",
     [string]$AppName = "vssh",
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\VeloSSH\bin",
-    [string]$VersionLdflags = ""
+    [string]$Version = "latest"
 )
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-    throw "go is required to build VeloSSH"
+switch ($env:PROCESSOR_ARCHITECTURE) {
+    "AMD64" { $Arch = "amd64" }
+    "ARM64" { $Arch = "arm64" }
+    default { throw "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
 }
 
-$RootDir = Resolve-Path (Join-Path $PSScriptRoot "..")
-$BinPath = Join-Path $InstallDir "$AppName.exe"
-$VersionPath = Join-Path $RootDir "VERSION"
-if ([string]::IsNullOrWhiteSpace($VersionLdflags) -and (Test-Path $VersionPath)) {
-    $Version = (Get-Content $VersionPath -Raw).Trim()
-    $VersionLdflags = "-X github.com/motoryang/velo-ssh/internal/version.Current=$Version"
+$Asset = "velossh-windows-$Arch.zip"
+$BinName = "velossh-windows-$Arch.exe"
+if ($Version -eq "latest") {
+    $Url = "https://github.com/$Repo/releases/latest/download/$Asset"
+} else {
+    $Url = "https://github.com/$Repo/releases/download/$Version/$Asset"
 }
 
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Write-Host "Building $AppName..."
-go build -trimpath -ldflags "$VersionLdflags" -o $BinPath $RootDir
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("velossh-install-" + [System.Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
 
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if (($userPath -split ";") -notcontains $InstallDir) {
-    [Environment]::SetEnvironmentVariable("Path", ($userPath.TrimEnd(";") + ";$InstallDir").TrimStart(";"), "User")
-    Write-Host "Added $InstallDir to the user PATH. Open a new terminal to use $AppName."
+try {
+    $ArchivePath = Join-Path $TempDir $Asset
+    Write-Host "Downloading $AppName $Version for windows/$Arch..."
+    Invoke-WebRequest -Uri $Url -OutFile $ArchivePath
+
+    Expand-Archive -Path $ArchivePath -DestinationPath $TempDir -Force
+    $SourcePath = Join-Path $TempDir $BinName
+    if (-not (Test-Path $SourcePath)) {
+        throw "Release archive did not contain $BinName"
+    }
+
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    $BinPath = Join-Path $InstallDir "$AppName.exe"
+    Copy-Item -Force -Path $SourcePath -Destination $BinPath
+
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (($UserPath -split ";") -notcontains $InstallDir) {
+        [Environment]::SetEnvironmentVariable("Path", ($UserPath.TrimEnd(";") + ";$InstallDir").TrimStart(";"), "User")
+        Write-Host "Added $InstallDir to the user PATH. Open a new terminal to use $AppName."
+    }
+
+    Write-Host "Installed $AppName to $BinPath"
+    Write-Host "Run: $AppName"
+} finally {
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $TempDir
 }
-
-Write-Host "Installed $AppName to $BinPath"
-Write-Host "Run: $AppName"

@@ -57,21 +57,23 @@
 
 ## 安装
 
-### 方式一：从源码构建
+### 方式一：一键安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/motoryang/velo-ssh.git
-cd velo-ssh
-
-# 构建并安装（自动读取 VERSION 文件注入版本号）
-chmod +x scripts/install.sh && ./scripts/install.sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh | sh
 ```
 
-构建产物默认安装到 `/usr/local/bin/vssh`，可通过环境变量自定义：
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.ps1 | iex
+```
+
+安装脚本会下载最新 Release 二进制，并安装为 `vssh`。
+可以通过环境变量指定安装目录或版本：
 
 ```bash
-PREFIX=~/.local ./scripts/install.sh
+PREFIX=~/.local VERSION=v1.1.1.26070701 sh -c "$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)"
 ```
 
 ### 方式二：Go 安装
@@ -84,7 +86,13 @@ go install github.com/motoryang/velo-ssh@latest
 
 从 [Releases 页面](https://github.com/motoryang/velo-ssh/releases) 下载对应平台的最新二进制文件，置于 `PATH` 中即可。
 
-> **Windows 用户**：也可以使用 `scripts/install.ps1` 脚本安装。
+### 方式四：从源码构建
+
+```bash
+git clone https://github.com/motoryang/velo-ssh.git
+cd velo-ssh
+go build -trimpath -o vssh .
+```
 
 ---
 

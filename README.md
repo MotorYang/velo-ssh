@@ -56,21 +56,23 @@ Author: [motoryang](https://github.com/motoryang) | [View Releases](https://gith
 
 ## Installation
 
-### Option 1: Build from Source
+### Option 1: One-Line Installer
 
 ```bash
-# Clone the repository
-git clone https://github.com/motoryang/velo-ssh.git
-cd velo-ssh
-
-# Build and install (auto-injects version from VERSION file)
-chmod +x scripts/install.sh && ./scripts/install.sh
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh | sh
 ```
 
-The binary is installed to `/usr/local/bin/vssh` by default. Customize via environment variables:
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.ps1 | iex
+```
+
+The installer downloads the latest Release binary and installs it as `vssh`.
+Customize the install location or version with environment variables:
 
 ```bash
-PREFIX=~/.local ./scripts/install.sh
+PREFIX=~/.local VERSION=v1.1.1.26070701 sh -c "$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)"
 ```
 
 ### Option 2: Go Install
@@ -83,7 +85,13 @@ go install github.com/motoryang/velo-ssh@latest
 
 Download the latest binary for your platform from the [Releases page](https://github.com/motoryang/velo-ssh/releases) and place it in your `PATH`.
 
-> **Windows users**: You can also use the `scripts/install.ps1` script.
+### Option 4: Build from Source
+
+```bash
+git clone https://github.com/motoryang/velo-ssh.git
+cd velo-ssh
+go build -trimpath -o vssh .
+```
 
 ---
 
