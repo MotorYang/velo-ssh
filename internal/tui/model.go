@@ -306,6 +306,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.syncRemoteEditDraftCmd(msg.draft)
+	case localFileOpenFinishedMsg:
+		if msg.err != nil {
+			m.err = fmt.Sprintf("open local file failed: %v", msg.err)
+			return m, nil
+		}
+		m.status = fmt.Sprintf("Opened local file %s.", msg.path)
+		return m, nil
 	case transferStartedMsg:
 		if msg.err != nil {
 			m.err = msg.err.Error()
@@ -1258,14 +1265,24 @@ func (m Model) handleFileManagerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.previous = m.state
 		m.openSettingsCenter()
 	case keyEnter:
-		if len(files) == 0 || cursor >= len(files) || !files[cursor].IsDir {
+		if len(files) == 0 || cursor >= len(files) {
 			return m, nil
 		}
-		if m.activePane == 0 {
-			m.localDir = files[cursor].Path
+		item := files[cursor]
+		if !item.IsDir {
+			if m.config.Settings.DefaultViewMode == config.ViewSingle || m.activePane == 1 {
+				return m, m.prepareRemoteEditCmd(item)
+			}
+			if item.Name == ".." {
+				return m, nil
+			}
+			return m, m.openLocalFileEditorCmd(item)
+		}
+		if m.config.Settings.DefaultViewMode != config.ViewSingle && m.activePane == 0 {
+			m.localDir = item.Path
 			m.localCursor = 0
 		} else {
-			m.remoteDir = files[cursor].Path
+			m.remoteDir = item.Path
 			m.remoteCursor = 0
 		}
 		return m, m.refreshFilePanesCmd()

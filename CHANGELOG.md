@@ -1,6 +1,9 @@
 # Changelog
 
 - Added support cancelling in-progress updates
+- Fixed File Manager split-pane rendering so filters, column headers, and shortcut footer remain visible at minimum terminal sizes.
+- Fixed File Manager Enter behavior for regular files: local files open in the configured editor and remote files start the remote edit flow.
+- Fixed remote edit sync and upload overwrite finalization by using OpenSSH POSIX rename when replacing existing remote files.
 
 ## v1.1.1.26070701
 

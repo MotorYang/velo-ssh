@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -821,11 +822,47 @@ func TestFileManagerViewDoesNotRenderAllRows(t *testing.T) {
 	if strings.Count(got, "\n") > 20 {
 		t.Fatalf("file manager rendered too many lines: %d", strings.Count(got, "\n"))
 	}
-	if !strings.Contains(got, "LOCAL rows 46-55/100") || !strings.Contains(got, "REMOTE rows 1-10/100") {
+	if !strings.Contains(got, "LOCAL rows 48-54/100") || !strings.Contains(got, "REMOTE rows 1-7/100") {
 		t.Fatalf("missing viewport marker: %q", got)
 	}
 	if !strings.Contains(got, "Sel") || !strings.Contains(got, "Mode") || !strings.Contains(got, "Name") {
 		t.Fatalf("missing file table header: %q", got)
+	}
+}
+
+func TestFileManagerSplitViewFitsMinimumTerminal(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.width = 80
+	m.height = 24
+	m.localDir = "/very/long/local/path/that/should/be/truncated/instead/of/wrapping"
+	m.remoteDir = "/very/long/remote/path/that/should/be/truncated/instead/of/wrapping"
+	m.localFileFilter = "local"
+	m.remoteFileFilter = "remote"
+	for i := 0; i < 40; i++ {
+		m.localFiles = append(m.localFiles, fileItem{Name: fmt.Sprintf("local-file-%02d-with-long-name.txt", i), Mode: 0o644, Size: int64(i)})
+		m.remoteFiles = append(m.remoteFiles, fileItem{Name: fmt.Sprintf("remote-file-%02d-with-long-name.txt", i), Mode: 0o644, Size: int64(i)})
+	}
+
+	got := m.View()
+	if !strings.Contains(got, "Search LOCAL=local REMOTE=remote") {
+		t.Fatalf("missing file filters: %q", got)
+	}
+	if !strings.Contains(got, "Sel") || !strings.Contains(got, "Mode") || !strings.Contains(got, "Name") {
+		t.Fatalf("missing file table header: %q", got)
+	}
+	if !strings.Contains(got, "[/] Search") || !strings.Contains(got, "[q] SSH Panel") {
+		t.Fatalf("missing file manager footer: %q", got)
+	}
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) > 24 {
+		t.Fatalf("rendered too many lines: %d\n%s", len(lines), got)
+	}
+	for _, line := range lines {
+		if width := visibleWidth(line); width > 80 {
+			t.Fatalf("line width = %d, want <= 80: %q", width, line)
+		}
 	}
 }
 
@@ -843,10 +880,10 @@ func TestFileManagerPaneScrollsIndependently(t *testing.T) {
 		m.remoteFiles[i] = fileItem{Name: "remote", Mode: 0o644}
 	}
 	got := m.viewFileManager()
-	if !strings.Contains(got, "LOCAL rows 76-85/100") {
+	if !strings.Contains(got, "LOCAL rows 78-84/100") {
 		t.Fatalf("local viewport did not follow local cursor: %q", got)
 	}
-	if !strings.Contains(got, "REMOTE rows 1-10/100") {
+	if !strings.Contains(got, "REMOTE rows 1-7/100") {
 		t.Fatalf("remote viewport should not follow local cursor: %q", got)
 	}
 }
@@ -1145,6 +1182,58 @@ func TestFileManagerEnterLocalDirectory(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("expected refresh command")
+	}
+}
+
+func TestFileManagerEnterLocalFileOpensEditor(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "aaa.md")
+	if err := os.WriteFile(filePath, []byte("# aaa\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 0
+	m.localDir = dir
+	local, err := listLocalFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.localFiles = local
+	for i, item := range m.localFiles {
+		if item.Name == "aaa.md" {
+			m.localCursor = i
+			break
+		}
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.localDir != dir {
+		t.Fatalf("localDir changed to %q, want %q", m.localDir, dir)
+	}
+	if cmd == nil {
+		t.Fatal("expected editor command for local file")
+	}
+}
+
+func TestFileManagerEnterRemoteFileStartsRemoteEdit(t *testing.T) {
+	cfg := config.DefaultFile()
+	cfg.Settings.DefaultViewMode = config.ViewSplit
+	m := NewModel(app.StateFileManager, config.NewStore(t.TempDir()), cfg)
+	m.activePane = 1
+	m.remoteFiles = []fileItem{{Name: "aaa.md", Path: "/tmp/aaa.md", Mode: 0o644}}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected remote edit command for remote file")
+	}
+	msg := cmd()
+	updated, _ = m.Update(msg)
+	m = updated.(Model)
+	if !strings.Contains(m.err, "ssh client is not connected") {
+		t.Fatalf("err = %q", m.err)
 	}
 }
 

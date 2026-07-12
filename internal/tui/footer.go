@@ -30,11 +30,11 @@ func (m Model) withFooter(body, help string) string {
 }
 
 func (m Model) footerBlock(help string) string {
-	lines := splitHelpLines(help)
 	width := m.width
 	if width <= 0 {
 		width = 80
 	}
+	lines := splitHelpLinesForWidth(help, width)
 	border := strings.Repeat("-", width)
 	if len(lines) == 1 {
 		return fmt.Sprintf("%s\n%s", border, lines[0])
@@ -43,13 +43,16 @@ func (m Model) footerBlock(help string) string {
 }
 
 func splitHelpLines(help string) []string {
+	return splitHelpLinesForWidth(help, 96)
+}
+
+func splitHelpLinesForWidth(help string, maxWidth int) []string {
 	parts := strings.Split(help, " | ")
 	if len(parts) <= 1 {
-		return []string{help}
+		return []string{term.Truncate(help, maxWidth)}
 	}
 	lines := make([]string, 0, 3)
 	current := ""
-	maxWidth := 96
 	for _, part := range parts {
 		candidate := part
 		if current != "" {
@@ -66,7 +69,10 @@ func splitHelpLines(help string) []string {
 		lines = append(lines, current)
 	}
 	if len(lines) == 0 {
-		return []string{help}
+		return []string{term.Truncate(help, maxWidth)}
+	}
+	for i, line := range lines {
+		lines[i] = term.Truncate(line, maxWidth)
 	}
 	return lines
 }

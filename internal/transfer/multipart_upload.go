@@ -167,7 +167,7 @@ func AtomicMultipartUpload(client *sftp.Client, localPath, remotePath, taskID st
 		return fmt.Errorf("multipart uploaded size mismatch: got %d want %d", st.Size(), total)
 	}
 	_ = client.Chmod(tmpPath, mode)
-	if err := client.Rename(tmpPath, remotePath); err != nil {
+	if err := finalizeRemoteWrite(client, tmpPath, remotePath); err != nil {
 		return err
 	}
 	_ = client.Remove(tmpPath)

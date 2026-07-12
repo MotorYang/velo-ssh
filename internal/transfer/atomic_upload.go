@@ -97,7 +97,7 @@ func AtomicUpload(client *sftp.Client, localPath, remotePath, taskID string, pro
 		return fmt.Errorf("uploaded size mismatch: got %d want %d", st.Size(), total)
 	}
 	_ = client.Chmod(tmpPath, mode)
-	if err := client.Rename(tmpPath, remotePath); err != nil {
+	if err := finalizeRemoteWrite(client, tmpPath, remotePath); err != nil {
 		return err
 	}
 	_ = client.Remove(tmpPath)
@@ -224,12 +224,19 @@ func AtomicRemoteCopy(sourceClient *sftp.Client, targetClient *sftp.Client, sour
 		return fmt.Errorf("cross-server copy size mismatch: got %d want %d", st.Size(), total)
 	}
 	_ = targetClient.Chmod(tmpPath, info.Mode())
-	if err := targetClient.Rename(tmpPath, targetPath); err != nil {
+	if err := finalizeRemoteWrite(targetClient, tmpPath, targetPath); err != nil {
 		return err
 	}
 	_ = targetClient.Remove(tmpPath)
 	cleanup = false
 	return nil
+}
+
+func finalizeRemoteWrite(client *sftp.Client, tmpPath, targetPath string) error {
+	if err := client.PosixRename(tmpPath, targetPath); err == nil {
+		return nil
+	}
+	return client.Rename(tmpPath, targetPath)
 }
 
 type progressCopyWriter struct {

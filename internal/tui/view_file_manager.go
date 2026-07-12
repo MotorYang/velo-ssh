@@ -11,6 +11,7 @@ import (
 )
 
 const minFilePaneWidth = 54
+const minSplitFilePaneWidth = 34
 
 func (m Model) viewFileManager() string {
 	var b strings.Builder
@@ -188,8 +189,8 @@ func (m Model) filePaneWidth(split bool) int {
 		return width
 	}
 	width := (m.width - 3) / 2
-	if width < minFilePaneWidth {
-		return minFilePaneWidth
+	if width < minSplitFilePaneWidth {
+		return minSplitFilePaneWidth
 	}
 	return width
 }
@@ -198,21 +199,50 @@ func (m Model) fileViewportRows() int {
 	if m.height <= 0 {
 		return 20
 	}
-	rows := m.height - 10
-	if m.renaming || m.creatingDir {
-		rows -= 2
+	bodyRows := m.height
+	if help := m.helpText(); help != "" {
+		bodyRows -= len(strings.Split(m.footerBlock(help), "\n"))
 	}
-	if m.fileSearching || m.localFileFilter != "" || m.remoteFileFilter != "" {
-		rows -= 2
+
+	fixedRows := 0
+	if m.config.Settings.DefaultViewMode == config.ViewSplit {
+		fixedRows = 7
+		if m.ssh == nil {
+			fixedRows++
+		}
+		if m.fileSearching {
+			fixedRows++
+		}
+		if m.fileSearching || m.localFileFilter != "" || m.remoteFileFilter != "" {
+			fixedRows++
+		}
+	} else {
+		fixedRows = 6
+		if m.ssh == nil {
+			fixedRows++
+		}
+		if m.fileSearching {
+			fixedRows++
+		}
+		if m.remoteFileFilter != "" {
+			fixedRows++
+		}
 	}
 	if m.err != "" {
-		rows--
+		fixedRows++
 	}
 	if m.status != "" {
-		rows--
+		fixedRows++
 	}
+	if m.renaming {
+		fixedRows += 2
+	}
+	if m.creatingDir {
+		fixedRows += 2
+	}
+	rows := bodyRows - fixedRows
 	if rows < 5 {
-		return 5
+		return max(1, rows)
 	}
 	return rows
 }

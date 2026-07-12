@@ -379,6 +379,36 @@ func TestIntegrationAtomicUploadFinalizesAfterSuccess(t *testing.T) {
 	}
 }
 
+func TestIntegrationAtomicUploadOverwritesExistingRemoteTarget(t *testing.T) {
+	server := startLocalSSHServer(t, nil)
+	_, sftpClient := connectPasswordClient(t, server)
+	targetPath := filepath.Join(server.root, "aaa.md")
+	if err := os.WriteFile(targetPath, []byte("old content"), 0o644); err != nil {
+		t.Fatalf("write existing remote target: %v", err)
+	}
+	localPath := filepath.Join(t.TempDir(), "aaa.md")
+	if err := os.WriteFile(localPath, []byte("new content"), 0o600); err != nil {
+		t.Fatalf("write local file: %v", err)
+	}
+	var tmpPath string
+	err := transfer.AtomicUpload(sftpClient, localPath, "aaa.md", "overwrite", nil, func(path string) {
+		tmpPath = path
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("atomic upload overwrite: %v", err)
+	}
+	got, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("read overwritten target: %v", err)
+	}
+	if string(got) != "new content" {
+		t.Fatalf("overwritten content = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(server.root, tmpPath)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected temp upload path removed, stat err=%v", err)
+	}
+}
+
 func TestIntegrationFailedUploadDoesNotTruncateExistingRemoteTarget(t *testing.T) {
 	server := startLocalSSHServer(t, nil)
 	_, sftpClient := connectPasswordClient(t, server)

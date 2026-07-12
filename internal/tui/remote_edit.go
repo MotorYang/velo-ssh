@@ -25,6 +25,11 @@ type remoteEditFinishedMsg struct {
 	err   error
 }
 
+type localFileOpenFinishedMsg struct {
+	path string
+	err  error
+}
+
 func (m Model) prepareRemoteEditCmd(item fileItem) tea.Cmd {
 	return func() tea.Msg {
 		if m.ssh == nil {
@@ -75,6 +80,18 @@ func (m Model) prepareRemoteEditCmd(item fileItem) tea.Cmd {
 }
 
 func (m Model) openRemoteDraftEditorCmd(draft config.Draft) tea.Cmd {
+	return openEditorCmd(draft.LocalPath, func(err error) tea.Msg {
+		return remoteEditFinishedMsg{draft: draft, err: err}
+	})
+}
+
+func (m Model) openLocalFileEditorCmd(item fileItem) tea.Cmd {
+	return openEditorCmd(item.Path, func(err error) tea.Msg {
+		return localFileOpenFinishedMsg{path: item.Path, err: err}
+	})
+}
+
+func openEditorCmd(filePath string, done func(error) tea.Msg) tea.Cmd {
 	editor := os.Getenv("VISUAL")
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
@@ -82,10 +99,8 @@ func (m Model) openRemoteDraftEditorCmd(draft config.Draft) tea.Cmd {
 	if editor == "" {
 		editor = "vi"
 	}
-	cmd := exec.Command(editor, draft.LocalPath)
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return remoteEditFinishedMsg{draft: draft, err: err}
-	})
+	cmd := exec.Command(editor, filePath)
+	return tea.ExecProcess(cmd, done)
 }
 
 func (m Model) syncRemoteEditDraftCmd(draft config.Draft) tea.Cmd {
