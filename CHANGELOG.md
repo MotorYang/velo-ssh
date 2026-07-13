@@ -1,9 +1,12 @@
 # Changelog
 
-## v1.2.1.26071201
+## Unreleased
 
 - Fixed update cancellation cleanup so partially downloaded update directories are removed.
 - Changed the one-line Unix installer to place the real binary under `/opt/velossh` and expose only a command link from `/usr/local/bin`.
+
+## v1.2.1.26071201
+
 - Improved update installation errors by checking install directory permissions before downloading and showing the one-line installer recovery command.
 
 ## v1.2.0.26071201
