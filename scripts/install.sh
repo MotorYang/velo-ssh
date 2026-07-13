@@ -4,8 +4,10 @@ set -eu
 REPO="${REPO:-motoryang/velo-ssh}"
 APP_NAME="${APP_NAME:-vssh}"
 VERSION="${VERSION:-latest}"
-PREFIX="${PREFIX:-/usr/local}"
-BINDIR="${BINDIR:-$PREFIX/bin}"
+INSTALL_DIR="${INSTALL_DIR:-${PREFIX:-/opt/velossh}}"
+BINDIR="${BINDIR:-$INSTALL_DIR/bin}"
+LINK_DIR="${LINK_DIR:-/usr/local/bin}"
+CREATE_LINK="${CREATE_LINK:-1}"
 
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -70,6 +72,34 @@ install_file() {
   sudo install -m 0755 "$src" "$dst"
 }
 
+ensure_user_owned_dir() {
+  dir="$1"
+  if [ -w "$dir" ]; then
+    return
+  fi
+  need sudo
+  sudo mkdir -p "$dir"
+  owner="${SUDO_USER:-$(id -un)}"
+  group="$(id -gn "$owner" 2>/dev/null || id -gn)"
+  sudo chown -R "$owner:$group" "$dir"
+}
+
+link_command() {
+  target="$1"
+  link="$2"
+  dir="$(dirname "$link")"
+  if [ "$CREATE_LINK" != "1" ]; then
+    return
+  fi
+  if [ -d "$dir" ] && [ -w "$dir" ]; then
+    ln -sf "$target" "$link"
+    return
+  fi
+  need sudo
+  sudo mkdir -p "$dir"
+  sudo ln -sf "$target" "$link"
+}
+
 OS="$(detect_os)"
 ARCH="$(detect_arch)"
 ASSET="velossh-$OS-$ARCH.tar.gz"
@@ -94,10 +124,14 @@ if [ ! -f "$TMPDIR/$BIN_NAME" ]; then
 fi
 
 BIN_PATH="$BINDIR/$APP_NAME"
+ensure_user_owned_dir "$INSTALL_DIR"
 install_file "$TMPDIR/$BIN_NAME" "$BIN_PATH"
+link_command "$BIN_PATH" "$LINK_DIR/$APP_NAME"
 
 echo "Installed $APP_NAME to $BIN_PATH"
-if ! command -v "$APP_NAME" >/dev/null 2>&1; then
+if [ "$CREATE_LINK" = "1" ]; then
+  echo "Linked $LINK_DIR/$APP_NAME -> $BIN_PATH"
+elif ! command -v "$APP_NAME" >/dev/null 2>&1; then
   echo "Note: $BINDIR is not on PATH in this shell."
 fi
 echo "Run: $APP_NAME"

@@ -68,11 +68,11 @@ curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/ins
 irm https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.ps1 | iex
 ```
 
-The installer downloads the latest Release binary and installs it as `vssh`.
+The installer downloads the latest Release binary to `/opt/velossh/bin/vssh` and links `vssh` into `/usr/local/bin`.
 Customize the install location or version with environment variables:
 
 ```bash
-PREFIX=~/.local VERSION=v1.1.1.26070701 sh -c "$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)"
+INSTALL_DIR=~/.local/opt/velossh LINK_DIR=~/.local/bin VERSION=v1.1.1.26070701 sh -c "$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)"
 ```
 
 ### Option 2: Go Install

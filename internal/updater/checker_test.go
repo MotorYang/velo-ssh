@@ -1,11 +1,16 @@
 package updater
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCompareVersions(t *testing.T) {
@@ -71,6 +76,65 @@ func TestEnsureInstallTargetWritableReportsRecoveryCommand(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("error missing %q: %s", want, got)
+		}
+	}
+}
+
+func TestInstallLatestCancelCleansTempDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TMPDIR override is platform-specific")
+	}
+	tmpRoot := t.TempDir()
+	t.Setenv("TMPDIR", tmpRoot)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1048576")
+		flusher, _ := w.(http.Flusher)
+		chunk := strings.Repeat("x", 4096)
+		for i := 0; i < 256; i++ {
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+			if _, err := w.Write([]byte(chunk)); err != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}))
+	defer server.Close()
+
+	rel := Release{
+		Version: "v1.2.3",
+		Assets: []Asset{{
+			Name:        "velossh-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz",
+			DownloadURL: server.URL,
+		}},
+	}
+	err := InstallLatestWithProgress(ctx, rel, func(progress Progress) {
+		if progress.Stage == "downloading" && progress.Downloaded > 0 {
+			cancel()
+		}
+	})
+	if err == nil {
+		t.Fatal("expected canceled update error")
+	}
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "context canceled") {
+		t.Fatalf("error = %v, want context canceled", err)
+	}
+	entries, err := os.ReadDir(tmpRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "velossh-update-") {
+			t.Fatalf("update temp dir was not cleaned: %s", entry.Name())
 		}
 	}
 }

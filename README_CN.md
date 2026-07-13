@@ -69,11 +69,11 @@ curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/ins
 irm https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.ps1 | iex
 ```
 
-安装脚本会下载最新 Release 二进制，并安装为 `vssh`。
+安装脚本会下载最新 Release 二进制到 `/opt/velossh/bin/vssh`，并在 `/usr/local/bin` 下创建 `vssh` 命令链接。
 可以通过环境变量指定安装目录或版本：
 
 ```bash
-PREFIX=~/.local VERSION=v1.1.1.26070701 sh -c "$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)"
+INSTALL_DIR=~/.local/opt/velossh LINK_DIR=~/.local/bin VERSION=v1.1.1.26070701 sh -c "$(curl -fsSL https://raw.githubusercontent.com/motoryang/velo-ssh/main/scripts/install.sh)"
 ```
 
 ### 方式二：Go 安装
